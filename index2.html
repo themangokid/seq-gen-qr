@@ -91,10 +91,23 @@
     color: var(--paper);
   }
 
-  .tab:not(.active):hover {
-    background: #e8e3d7;
-    color: var(--ink);
+  .btn-broadcast {
+    margin-left: auto;
+    border-radius: 0;
+    border: none;
+    border-left: 2px solid var(--border);
+    background: var(--accent);
+    color: white;
+    padding: 14px 20px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
+  .btn-broadcast:hover { background: #a93226; border-color: var(--border); }
 
   /* Panels */
   .panel { display: none; padding: 16px; }
@@ -282,7 +295,7 @@
   }
 
   @keyframes slideIn {
-    from { opacity: 0; transform: translateY(12px); }
+    from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
@@ -773,18 +786,14 @@
 <div class="tabs">
   <button class="tab active" onclick="switchTab('generate')">① Generate</button>
   <button class="tab" onclick="switchTab('read')">② Read / Scan</button>
+  <button class="btn btn-broadcast" id="broadcastBtn" onclick="openSlideshow()" style="display:none">⬡ Broadcast</button>
 </div>
 
 <div id="generatePanel" class="panel active">
   <p class="gen-label">Paste your text</p>
-  <textarea id="textInput" placeholder="Paste any text here — it will be split across multiple QR codes automatically…"></textarea>
+  <textarea id="textInput" placeholder="Paste any text here — it will be split across multiple QR codes automatically…" style="height:220px"></textarea>
 
   <div class="controls-row">
-    <div class="ctrl-group">
-      <label>Chunk size:</label>
-      <input type="range" id="chunkSize" min="40" max="280" value="100" step="10">
-      <span id="chunkSizeVal">100</span> chars
-    </div>
     <button class="btn" onclick="generateChain()">Generate Chain</button>
     <button class="btn secondary" onclick="clearGen()">Clear</button>
   </div>
@@ -797,7 +806,6 @@
     <div class="qr-cards" id="qrCards"></div>
     <div class="print-btn-row">
       <button class="btn secondary" onclick="window.print()">🖨 Print all codes</button>
-      <button class="btn" onclick="openSlideshow()">⬡ Broadcast</button>
     </div>
   </div>
 </div>
@@ -946,13 +954,6 @@ textInput.addEventListener('input', () => {
 // ═══════════════════════════════════════════
 //  GENERATE
 // ═══════════════════════════════════════════
-const chunkSlider = document.getElementById('chunkSize');
-const chunkVal    = document.getElementById('chunkSizeVal');
-chunkSlider.addEventListener('input', () => {
-  chunkVal.textContent = chunkSlider.value;
-  document.getElementById('drwChunk').value = chunkSlider.value;
-  document.getElementById('drwChunkVal').textContent = chunkSlider.value;
-});
 
 function chunkText(text, size) {
   const chunks = [];
@@ -980,7 +981,7 @@ function generateChain() {
   const raw = document.getElementById('textInput').value.trim();
   if (!raw) { showToast('Paste some text first'); return; }
 
-  const size   = parseInt(chunkSlider.value);
+  const size   = parseInt(document.getElementById('drwChunk').value) || 100;
   const chunks = chunkText(raw, size);
   const total  = chunks.length;
 
@@ -993,7 +994,8 @@ function generateChain() {
     const payload = encodeChunk(idx + 1, total, chunk);
     const card    = document.createElement('div');
     card.className = 'qr-card';
-    card.style.animationDelay = (idx * 60) + 'ms';
+    card.style.animation = `slideIn 0.15s ease forwards`;
+    card.style.animationDelay = (idx * 20) + 'ms';
 
     const encodedPayload = encodeURIComponent(payload);
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=L&format=png&margin=20&data=${encodedPayload}`;
@@ -1011,6 +1013,7 @@ function generateChain() {
   });
 
   document.getElementById('qrSequence').style.display = 'block';
+  document.getElementById('broadcastBtn').style.display = 'flex';
   showToast(`${total} QR codes generated`, true);
 }
 
@@ -1018,6 +1021,7 @@ function clearGen() {
   document.getElementById('textInput').value = '';
   document.getElementById('qrSequence').style.display = 'none';
   document.getElementById('qrCards').innerHTML = '';
+  document.getElementById('broadcastBtn').style.display = 'none';
   ssChunks = [];
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
 }
@@ -1257,27 +1261,16 @@ function loadSettings() {
 }
 
 function applyPreset(chunk, speed, silent) {
-  // Update chunk slider + display
-  document.getElementById('chunkSize').value = chunk;
-  document.getElementById('chunkSizeVal').textContent = chunk;
   document.getElementById('drwChunk').value = chunk;
   document.getElementById('drwChunkVal').textContent = chunk;
-
-  // Update speed
   ssSpeed = speed;
   document.getElementById('drwSpeed').value = speed;
   document.getElementById('drwSpeedVal').textContent = (speed / 1000).toFixed(1);
   document.getElementById('ssSpdLabel').textContent = (speed / 1000).toFixed(1) + 's';
-
-  if (!silent) {
-    showToast('Preset applied', true);
-    closeSettings();
-  }
+  if (!silent) { showToast('Preset applied', true); closeSettings(); }
 }
 
 function syncChunk(val) {
-  document.getElementById('chunkSize').value = val;
-  document.getElementById('chunkSizeVal').textContent = val;
   document.getElementById('drwChunkVal').textContent = val;
 }
 
