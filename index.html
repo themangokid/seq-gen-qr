@@ -91,10 +91,23 @@
     color: var(--paper);
   }
 
-  .tab:not(.active):hover {
-    background: #e8e3d7;
-    color: var(--ink);
+  .btn-broadcast {
+    margin-left: auto;
+    border-radius: 0;
+    border: none;
+    border-left: 2px solid var(--border);
+    background: var(--accent);
+    color: white;
+    padding: 14px 20px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
+  .btn-broadcast:hover { background: #a93226; border-color: var(--border); }
 
   /* Panels */
   .panel { display: none; padding: 16px; }
@@ -282,7 +295,7 @@
   }
 
   @keyframes slideIn {
-    from { opacity: 0; transform: translateY(12px); }
+    from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
@@ -626,6 +639,137 @@
     text-align: center;
   }
 
+  /* ── HAMBURGER ── */
+  header {
+    position: relative;
+  }
+
+  .hamburger {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .hamburger span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--ink);
+    border-radius: 2px;
+    transition: background 0.15s;
+  }
+
+  .hamburger:hover span { background: var(--accent); }
+
+  /* ── SETTINGS DRAWER ── */
+  #settingsDrawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(320px, 90vw);
+    background: var(--paper);
+    border-left: 3px solid var(--border);
+    z-index: 3001;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+  }
+
+  #settingsDrawer.open { transform: translateX(0); }
+
+  .drw-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 16px 20px;
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .drw-close {
+    background: none;
+    border: none;
+    color: var(--paper);
+    font-size: 20px;
+    cursor: pointer;
+    opacity: 0.7;
+    line-height: 1;
+  }
+  .drw-close:hover { opacity: 1; }
+
+  .drw-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--paper2);
+  }
+
+  .drw-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 12px;
+  }
+
+  .drw-presets {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .preset-btn {
+    background: white;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .preset-btn:hover { background: var(--ink); color: var(--paper); }
+  .preset-btn:hover .preset-sub { color: #aaa; }
+
+  .preset-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .preset-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #888;
+  }
+
+  #settingsDrawer input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+
+  .drw-hint {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
   canvas#qrCanvas { display: none; }
 </style>
 </head>
@@ -634,23 +778,22 @@
 <header>
   <h1>QR Chain</h1>
   <span class="tagline">Sequential text via QR codes</span>
+  <button class="hamburger" onclick="openSettings()" aria-label="Settings">
+    <span></span><span></span><span></span>
+  </button>
 </header>
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('generate')">① Generate</button>
   <button class="tab" onclick="switchTab('read')">② Read / Scan</button>
+  <button class="btn btn-broadcast" id="broadcastBtn" onclick="openSlideshow()" style="display:none">⬡ Broadcast</button>
 </div>
 
 <div id="generatePanel" class="panel active">
   <p class="gen-label">Paste your text</p>
-  <textarea id="textInput" placeholder="Paste any text here — it will be split across multiple QR codes automatically…"></textarea>
+  <textarea id="textInput" placeholder="Paste any text here — it will be split across multiple QR codes automatically…" style="height:220px"></textarea>
 
   <div class="controls-row">
-    <div class="ctrl-group">
-      <label>Chunk size:</label>
-      <input type="range" id="chunkSize" min="40" max="280" value="100" step="10">
-      <span id="chunkSizeVal">100</span> chars
-    </div>
     <button class="btn" onclick="generateChain()">Generate Chain</button>
     <button class="btn secondary" onclick="clearGen()">Clear</button>
   </div>
@@ -663,7 +806,6 @@
     <div class="qr-cards" id="qrCards"></div>
     <div class="print-btn-row">
       <button class="btn secondary" onclick="window.print()">🖨 Print all codes</button>
-      <button class="btn" onclick="openSlideshow()">⬡ Broadcast</button>
     </div>
   </div>
 </div>
@@ -738,6 +880,48 @@
   </div>
 </div>
 
+<!-- Settings drawer -->
+<div id="settingsBackdrop" onclick="closeSettings()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;"></div>
+<div id="settingsDrawer">
+  <div class="drw-header">
+    <span>Settings</span>
+    <button class="drw-close" onclick="closeSettings()">✕</button>
+  </div>
+
+  <div class="drw-section">
+    <div class="drw-label">Presets</div>
+    <div class="drw-presets">
+      <button class="preset-btn" onclick="applyPreset(100, 200)">
+        <span class="preset-name">Fast &amp; Many</span>
+        <span class="preset-sub">0.2s · 100 chars</span>
+      </button>
+      <button class="preset-btn" onclick="applyPreset(250, 200)">
+        <span class="preset-name">Balanced</span>
+        <span class="preset-sub">0.2s · 250 chars</span>
+      </button>
+      <button class="preset-btn" onclick="applyPreset(280, 1500)">
+        <span class="preset-name">Slow &amp; Few</span>
+        <span class="preset-sub">1.5s · 280 chars</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="drw-section">
+    <div class="drw-label">Chunk Size — <span id="drwChunkVal">100</span> chars</div>
+    <input type="range" id="drwChunk" min="40" max="280" value="100" step="10" oninput="syncChunk(this.value)">
+  </div>
+
+  <div class="drw-section">
+    <div class="drw-label">Broadcast Speed — <span id="drwSpeedVal">0.2</span>s per code</div>
+    <input type="range" id="drwSpeed" min="200" max="4000" value="200" step="100" oninput="syncSpeed(this.value)">
+  </div>
+
+  <div class="drw-section">
+    <button class="btn" style="width:100%" onclick="saveDefaults()">Save as Default</button>
+    <p class="drw-hint">Saved defaults load automatically on next visit.</p>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -770,9 +954,6 @@ textInput.addEventListener('input', () => {
 // ═══════════════════════════════════════════
 //  GENERATE
 // ═══════════════════════════════════════════
-const chunkSlider = document.getElementById('chunkSize');
-const chunkVal    = document.getElementById('chunkSizeVal');
-chunkSlider.addEventListener('input', () => chunkVal.textContent = chunkSlider.value);
 
 function chunkText(text, size) {
   const chunks = [];
@@ -800,7 +981,7 @@ function generateChain() {
   const raw = document.getElementById('textInput').value.trim();
   if (!raw) { showToast('Paste some text first'); return; }
 
-  const size   = parseInt(chunkSlider.value);
+  const size   = parseInt(document.getElementById('drwChunk').value) || 100;
   const chunks = chunkText(raw, size);
   const total  = chunks.length;
 
@@ -813,7 +994,8 @@ function generateChain() {
     const payload = encodeChunk(idx + 1, total, chunk);
     const card    = document.createElement('div');
     card.className = 'qr-card';
-    card.style.animationDelay = (idx * 60) + 'ms';
+    card.style.animation = `slideIn 0.15s ease forwards`;
+    card.style.animationDelay = (idx * 20) + 'ms';
 
     const encodedPayload = encodeURIComponent(payload);
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=L&format=png&margin=20&data=${encodedPayload}`;
@@ -831,6 +1013,7 @@ function generateChain() {
   });
 
   document.getElementById('qrSequence').style.display = 'block';
+  document.getElementById('broadcastBtn').style.display = 'flex';
   showToast(`${total} QR codes generated`, true);
 }
 
@@ -838,6 +1021,7 @@ function clearGen() {
   document.getElementById('textInput').value = '';
   document.getElementById('qrSequence').style.display = 'none';
   document.getElementById('qrCards').innerHTML = '';
+  document.getElementById('broadcastBtn').style.display = 'none';
   ssChunks = [];
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
 }
@@ -1061,6 +1245,67 @@ function closeModal(e) {
     document.getElementById('textModal').classList.remove('open');
   }
 }
+
+// ═══════════════════════════════════════════
+//  SETTINGS DRAWER
+// ═══════════════════════════════════════════
+const SETTINGS_KEY = 'qrchain-settings';
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const chunk = s.chunk || 100;
+    const speed = s.speed || 200;
+    applyPreset(chunk, speed, true); // silent = don't toast
+  } catch(e) {}
+}
+
+function applyPreset(chunk, speed, silent) {
+  document.getElementById('drwChunk').value = chunk;
+  document.getElementById('drwChunkVal').textContent = chunk;
+  ssSpeed = speed;
+  document.getElementById('drwSpeed').value = speed;
+  document.getElementById('drwSpeedVal').textContent = (speed / 1000).toFixed(1);
+  document.getElementById('ssSpdLabel').textContent = (speed / 1000).toFixed(1) + 's';
+  if (!silent) { showToast('Preset applied', true); closeSettings(); }
+}
+
+function syncChunk(val) {
+  document.getElementById('drwChunkVal').textContent = val;
+}
+
+function syncSpeed(val) {
+  ssSpeed = parseInt(val);
+  document.getElementById('drwSpeedVal').textContent = (val / 1000).toFixed(1);
+  document.getElementById('ssSpdLabel').textContent = (val / 1000).toFixed(1) + 's';
+  if (ssInterval) {
+    clearInterval(ssInterval);
+    ssInterval = setInterval(advanceSlide, ssSpeed);
+  }
+}
+
+function saveDefaults() {
+  const chunk = parseInt(document.getElementById('drwChunk').value);
+  const speed = parseInt(document.getElementById('drwSpeed').value);
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ chunk, speed }));
+    showToast('Defaults saved', true);
+    closeSettings();
+  } catch(e) { showToast('Save failed'); }
+}
+
+function openSettings() {
+  document.getElementById('settingsDrawer').classList.add('open');
+  document.getElementById('settingsBackdrop').style.display = 'block';
+}
+
+function closeSettings() {
+  document.getElementById('settingsDrawer').classList.remove('open');
+  document.getElementById('settingsBackdrop').style.display = 'none';
+}
+
+// Load saved settings on startup
+loadSettings();
 
 // ═══════════════════════════════════════════
 //  COPY TEXT
