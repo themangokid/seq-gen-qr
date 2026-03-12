@@ -335,58 +335,17 @@
     position: relative;
   }
 
-  .scanner-box video {
+  /* nimiq qr-scanner renders its own video+canvas inside #reader */
+  #reader {
     width: 100%;
-    display: block;
-    max-height: 280px;
+    min-height: 260px;
+  }
+
+  #reader video {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 320px;
     object-fit: cover;
-  }
-
-  .scan-overlay {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .scan-frame {
-    width: 160px;
-    height: 160px;
-    border: 3px solid var(--accent);
-    border-radius: 4px;
-    position: relative;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
-  }
-
-  .scan-frame::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: var(--accent);
-    animation: scanLine 2s ease-in-out infinite;
-    box-shadow: 0 0 8px var(--accent);
-  }
-
-  @keyframes scanLine {
-    0%, 100% { top: 0; }
-    50% { top: calc(100% - 2px); }
-  }
-
-  .scanner-status {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(0,0,0,0.7);
-    color: white;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 8px 14px;
-    text-align: center;
   }
 
   .camera-start {
@@ -405,6 +364,16 @@
     font-size: 12px;
     text-align: center;
     letter-spacing: 0.04em;
+  }
+
+  .scanner-status {
+    background: rgba(0,0,0,0.7);
+    color: white;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    text-align: center;
   }
 
   /* Accumulated text */
@@ -572,10 +541,7 @@
     height: min(80vw, 80vh, 500px);
     object-fit: contain;
     border-radius: 4px;
-    transition: opacity 0.15s ease;
   }
-
-  #ssQrImg.fade { opacity: 0; }
 
   .ss-bottom {
     padding: 14px 20px 20px;
@@ -703,11 +669,7 @@
         </svg>
         <p>Press "Start Camera" to begin scanning QR codes.<br>Allow camera access when prompted.</p>
       </div>
-      <video id="videoEl" autoplay playsinline style="display:none"></video>
-      <canvas id="scanCanvas" style="display:none"></canvas>
-      <div class="scan-overlay" id="scanOverlay" style="display:none">
-        <div class="scan-frame"></div>
-      </div>
+      <div id="reader" style="display:none"></div>
       <div class="scanner-status" id="scanStatus" style="display:none">Align QR code in frame</div>
     </div>
 
@@ -760,10 +722,7 @@
 
 <div id="toast"></div>
 
-<!-- jsQR library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
-
-<script>
+<script type="module">
 // ═══════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════
@@ -849,54 +808,44 @@ function clearGen() {
 }
 
 // ═══════════════════════════════════════════
-//  READ / SCAN
+//  READ / SCAN  (nimiq/qr-scanner)
 // ═══════════════════════════════════════════
+import QrScanner from 'https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js';
+
 let cameraStarted = false;
-let scanning      = false;
-let scanLoop      = null;
-let scannedChunks = {}; // index -> text
+let qrScanner     = null;
+let scannedChunks = {};
 let totalChunks   = null;
 let lastScanned   = null;
 
 async function startCamera() {
+  const readerEl = document.getElementById('reader');
+  readerEl.style.display = 'block';
+  document.getElementById('cameraStart').style.display = 'none';
+  document.getElementById('scanStatus').style.display = 'block';
+  document.getElementById('startCamBtn').textContent = 'Camera On';
+  document.getElementById('startCamBtn').disabled = true;
+  cameraStarted = true;
+
+  qrScanner = new QrScanner(
+    // nimiq needs a video element — create one inside #reader
+    (() => { const v = document.createElement('video'); readerEl.appendChild(v); return v; })(),
+    result => processQR(result.data),
+    {
+      preferredCamera: 'environment',
+      highlightScanRegion: true,
+      highlightCodeOutline: true,
+      returnDetailedScanResult: true,
+    }
+  );
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    const video = document.getElementById('videoEl');
-    video.srcObject = stream;
-    video.style.display = 'block';
-    document.getElementById('cameraStart').style.display = 'none';
-    document.getElementById('scanOverlay').style.display = 'flex';
-    document.getElementById('scanStatus').style.display = 'block';
-    document.getElementById('startCamBtn').textContent = 'Camera On';
-    document.getElementById('startCamBtn').disabled = true;
-    cameraStarted = true;
-    scanning = true;
-    video.onloadedmetadata = () => { video.play(); startScanLoop(); };
+    await qrScanner.start();
+    setStatus('Camera running — point at a QR code');
   } catch(e) {
     showToast('Camera access denied');
     console.error(e);
   }
-}
-
-function startScanLoop() {
-  const video  = document.getElementById('videoEl');
-  const canvas = document.getElementById('scanCanvas');
-  const ctx    = canvas.getContext('2d', { willReadFrequently: true });
-
-  // setInterval instead of rAF: gives the camera sensor time to expose each frame.
-  // attemptBoth is critical for screen-displayed QR codes (backlit, inverted contrast).
-  scanLoop = setInterval(() => {
-    if (!scanning) return;
-    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-    const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
-    if (code) processQR(code.data);
-  }, 300);
 }
 
 function processQR(data) {
@@ -1019,43 +968,35 @@ function advanceSlide() {
 }
 
 function showSlide(idx) {
-  const img      = document.getElementById('ssQrImg');
-  const label    = document.getElementById('ssLabel');
-  const info     = document.getElementById('ssCodeInfo');
-  const bar      = document.getElementById('ssProgressBar');
-  const total    = ssChunks.length;
+  const img   = document.getElementById('ssQrImg');
+  const label = document.getElementById('ssLabel');
+  const info  = document.getElementById('ssCodeInfo');
+  const bar   = document.getElementById('ssProgressBar');
+  const total = ssChunks.length;
 
-  // Fade out
-  img.classList.add('fade');
-
-  setTimeout(() => {
-    if (idx === -1) {
-      // Calibration slide
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&ecc=M&data=${CAL_PAYLOAD}`;
-      label.textContent = 'CALIBRATION';
-      label.style.color = '#f39c12';
-      info.textContent  = 'Calibration — point your phone camera here and hold steady';
-      bar.style.width   = '0%';
-      bar.style.transitionDuration = '0ms';
-      bar.className = 'ss-progress-bar calibration';
-    } else {
-      const chunk   = ssChunks[idx];
-      const payload = encodeChunk(idx + 1, total, chunk);
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
-      label.textContent = `CODE ${idx + 1} / ${total}${ssLoopCount > 0 ? ' · LOOP ' + (ssLoopCount + 1) : ''}`;
-      label.style.color = '#aaa';
-      info.textContent  = `"${chunk.slice(0, 50)}${chunk.length > 50 ? '…' : ''}"`;
-      // Animate progress bar
-      bar.style.transitionDuration = '0ms';
-      bar.style.width = ((idx / total) * 100) + '%';
-      bar.className = 'ss-progress-bar';
-      requestAnimationFrame(() => {
-        bar.style.transitionDuration = ssSpeed + 'ms';
-        bar.style.width = (((idx + 1) / total) * 100) + '%';
-      });
-    }
-    img.classList.remove('fade');
-  }, 120);
+  if (idx === -1) {
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${CAL_PAYLOAD}`;
+    label.textContent = 'CALIBRATION';
+    label.style.color = '#f39c12';
+    info.textContent  = 'Calibration — point your phone camera here and hold steady';
+    bar.style.width   = '0%';
+    bar.style.transitionDuration = '0ms';
+    bar.className = 'ss-progress-bar calibration';
+  } else {
+    const chunk   = ssChunks[idx];
+    const payload = encodeChunk(idx + 1, total, chunk);
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
+    label.textContent = `CODE ${idx + 1} / ${total}${ssLoopCount > 0 ? ' · LOOP ' + (ssLoopCount + 1) : ''}`;
+    label.style.color = '#aaa';
+    info.textContent  = `"${chunk.slice(0, 50)}${chunk.length > 50 ? '…' : ''}"`;
+    bar.style.transitionDuration = '0ms';
+    bar.style.width = ((idx / total) * 100) + '%';
+    bar.className = 'ss-progress-bar';
+    requestAnimationFrame(() => {
+      bar.style.transitionDuration = ssSpeed + 'ms';
+      bar.style.width = (((idx + 1) / total) * 100) + '%';
+    });
+  }
 }
 
 function adjustSpeed(delta) {
