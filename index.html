@@ -823,7 +823,7 @@ function generateChain() {
     card.style.animationDelay = (idx * 60) + 'ms';
 
     const encodedPayload = encodeURIComponent(payload);
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=L&data=${encodedPayload}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=L&format=png&margin=20&data=${encodedPayload}`;
 
     card.innerHTML = `
       <div class="qr-card-header">
@@ -1041,7 +1041,7 @@ function showSlide(idx) {
     } else {
       const chunk   = ssChunks[idx];
       const payload = encodeChunk(idx + 1, total, chunk);
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&data=${encodeURIComponent(payload)}`;
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
       label.textContent = `CODE ${idx + 1} / ${total}${ssLoopCount > 0 ? ' · LOOP ' + (ssLoopCount + 1) : ''}`;
       label.style.color = '#aaa';
       info.textContent  = `"${chunk.slice(0, 50)}${chunk.length > 50 ? '…' : ''}"`;
