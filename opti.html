@@ -493,107 +493,158 @@
     100% { background: white; }
   }
 
-  /* ── SCAN TIMELINE ── */
-  .scan-timeline-box {
+  /* ── SCAN TIMELINE (film strip, below camera) ── */
+  .tl-wrap {
     border: 2px solid var(--border);
     border-radius: var(--radius);
-    background: white;
-    margin-top: 0;
+    background: #1a1a18;
+    overflow: hidden;
   }
-  .scan-timeline-header {
-    background: var(--ink);
-    color: var(--paper);
-    padding: 8px 14px;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+
+  .tl-topbar {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     gap: 10px;
+    padding: 7px 12px;
+    background: #111;
+    border-bottom: 1px solid #333;
   }
-  .scan-timeline-legend {
-    display: flex;
-    gap: 10px;
+
+  .tl-title {
+    font-family: 'DM Mono', monospace;
     font-size: 10px;
-    color: rgba(255,255,255,0.6);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #777;
+    white-space: nowrap;
   }
-  .scan-timeline-legend span { display: flex; align-items: center; gap: 4px; }
-  .legend-dot {
-    width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
-  }
-  .legend-dot.got  { background: var(--scan-green); }
-  .legend-dot.miss { background: #444; border: 1px solid #666; }
 
-  .scan-timeline-grid {
-    padding: 12px 14px;
+  .tl-stats {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #aaa;
+    flex: 1;
+  }
+
+  .tl-missing-badge {
+    background: var(--accent);
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 2px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* Horizontal scrolling strip */
+  .tl-strip-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 10px 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+  }
+  .tl-strip-wrap::-webkit-scrollbar { height: 4px; }
+  .tl-strip-wrap::-webkit-scrollbar-track { background: transparent; }
+  .tl-strip-wrap::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .tl-strip {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    max-height: 220px;
-    overflow-y: auto;
+    gap: 3px;
+    min-width: max-content;
+    align-items: flex-end;
   }
 
-  .stl-cell {
-    width: 36px;
-    height: 30px;
+  /* Each cell = one QR frame */
+  .tl-cell {
+    flex-shrink: 0;
+    width: 28px;
+    height: 36px;
     border-radius: 3px;
-    border: 1.5px solid #ddd;
-    background: #f8f8f6;
+    background: #2a2a28;
+    border: 1.5px solid #3a3a38;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    color: #bbb;
+    gap: 2px;
     cursor: pointer;
-    transition: background 0.1s, border-color 0.1s, transform 0.1s;
-    user-select: none;
+    transition: transform 0.1s, border-color 0.15s;
     -webkit-tap-highlight-color: transparent;
     position: relative;
   }
-  .stl-cell:hover { border-color: var(--ink); color: var(--ink); transform: scale(1.08); z-index: 1; }
-  .stl-cell.scanned {
-    background: var(--scan-green);
-    border-color: var(--scan-green);
+
+  .tl-cell:hover { transform: scaleY(1.12); border-color: #888; z-index: 1; }
+
+  .tl-cell-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 7.5px;
+    color: #555;
+    line-height: 1;
+  }
+
+  .tl-cell-bar {
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+    background: #3a3a38;
+    transition: background 0.2s;
+  }
+
+  /* States */
+  .tl-cell.got { background: #1a3d27; border-color: var(--scan-green); }
+  .tl-cell.got .tl-cell-num { color: var(--scan-green); }
+  .tl-cell.got .tl-cell-bar { background: var(--scan-green); }
+
+  .tl-cell.miss { background: #2d1414; border-color: #c0392b; animation: tlPulse 1.6s ease-in-out infinite; }
+  .tl-cell.miss .tl-cell-num { color: #e74c3c; }
+  .tl-cell.miss .tl-cell-bar { background: #e74c3c; }
+
+  /* Only pulse on cells that are actually identified as missing (totalChunks known) */
+  @keyframes tlPulse {
+    0%, 100% { box-shadow: none; }
+    50%       { box-shadow: 0 0 0 2px rgba(192,57,43,0.4); }
+  }
+
+  /* Current-scan cursor: the last-scanned cell gets a highlight ring */
+  .tl-cell.current { outline: 2px solid #f39c12; outline-offset: 1px; }
+
+  /* Hint bar shown when a missing frame is tapped */
+  .tl-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--accent);
+    border-top: 1px solid #a93226;
+  }
+
+  .tl-hint-icon { font-size: 14px; color: white; flex-shrink: 0; }
+
+  #tlHintText {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
     color: white;
-  }
-  .stl-cell.scanned:hover { background: #1e8449; border-color: #1e8449; }
-  .stl-cell.missing {
-    background: #fff3f3;
-    border-color: #e74c3c;
-    color: #e74c3c;
-    animation: pulseMiss 1.8s ease-in-out infinite;
-  }
-  @keyframes pulseMiss {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
-    50%       { box-shadow: 0 0 0 3px rgba(231,76,60,0.25); }
+    flex: 1;
+    letter-spacing: 0.03em;
   }
 
-  .stl-empty {
-    padding: 20px;
-    font-size: 11px;
-    color: #bbb;
-    letter-spacing: 0.05em;
-    text-align: center;
+  .tl-hint-dismiss {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
   }
-
-  /* Tooltip that appears on hover showing "Jump to #N on sender" */
-  .stl-cell[data-tip]:hover::after {
-    content: attr(data-tip);
-    position: absolute;
-    bottom: calc(100% + 5px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--ink);
-    color: var(--paper);
-    font-size: 9px;
-    white-space: nowrap;
-    padding: 3px 7px;
-    border-radius: 3px;
-    pointer-events: none;
-    z-index: 100;
-  }
+  .tl-hint-dismiss:hover { background: rgba(255,255,255,0.35); }
 
   .read-controls { display: flex; gap: 10px; flex-wrap: wrap; }
 
@@ -827,6 +878,7 @@
       <button class="btn" id="startCamBtn" onclick="startCamera()">Start Camera</button>
       <button class="btn secondary" onclick="resetReader()">Reset Text</button>
     </div>
+
     <div class="scanner-box" id="scannerBox">
       <div class="camera-start" id="cameraStart">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5">
@@ -838,6 +890,26 @@
       <div id="reader" style="display:none"></div>
       <div class="scanner-status" id="scanStatus" style="display:none">Align QR code in frame</div>
     </div>
+
+    <!-- ── TIMELINE — sits right below camera, hidden until first chunk arrives ── -->
+    <div class="tl-wrap" id="tlWrap" style="display:none">
+      <div class="tl-topbar">
+        <span class="tl-title">QR Timeline</span>
+        <span class="tl-stats" id="tlStats"></span>
+        <span class="tl-missing-badge" id="tlMissBadge" style="display:none"></span>
+      </div>
+      <!-- The strip itself: one thin cell per frame, scrolls horizontally -->
+      <div class="tl-strip-wrap">
+        <div class="tl-strip" id="tlStrip"></div>
+      </div>
+      <!-- Jump hint shown when a missing frame is clicked -->
+      <div class="tl-hint" id="tlHint" style="display:none">
+        <span class="tl-hint-icon">↑</span>
+        <span id="tlHintText">Jump to frame … on the sender</span>
+        <button class="tl-hint-dismiss" onclick="document.getElementById('tlHint').style.display='none'">✕</button>
+      </div>
+    </div>
+
     <div class="text-output-box">
       <div class="text-output-header">
         <span>Accumulated Text</span>
@@ -854,20 +926,6 @@
           <div class="file-download-sub" id="fileDownloadSub"></div>
         </div>
         <button class="file-download-btn" onclick="downloadReceivedFile()">⬇ Download</button>
-      </div>
-    </div>
-
-    <!-- Frame timeline -->
-    <div class="scan-timeline-box" id="scanTimelineBox" style="display:none">
-      <div class="scan-timeline-header">
-        <span>Frame Timeline <span id="tlMissCount" style="margin-left:6px;background:var(--accent);padding:1px 7px;border-radius:20px;font-size:10px;"></span></span>
-        <div class="scan-timeline-legend">
-          <span><span class="legend-dot got"></span>Got</span>
-          <span><span class="legend-dot miss"></span>Missing — click to highlight on sender</span>
-        </div>
-      </div>
-      <div class="scan-timeline-grid" id="scanTimelineGrid">
-        <div class="stl-empty">Start scanning to see frame progress…</div>
       </div>
     </div>
   </div>
@@ -1364,56 +1422,109 @@ async function updateTextDisplay() {
   pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
 }
 
-// ── SCAN TIMELINE (replaces chunk badges) ──
+// ── SCAN TIMELINE ──
+// Renders a horizontal film-strip of cells, one per frame.
+// Grey = not yet received (but total unknown → don't mark red yet)
+// Green = scanned
+// Red/pulsing = confirmed missing (total IS known, frame not received, and
+//               frames after it have been received OR we're past it)
+let lastKnownTotal = 0;
+
 function updateTimeline(total) {
-  const box  = document.getElementById('scanTimelineBox');
-  const grid = document.getElementById('scanTimelineGrid');
-  const missCount = document.getElementById('tlMissCount');
-  box.style.display = 'block';
-  grid.innerHTML = '';
+  if (!total) return;
+  lastKnownTotal = total;
 
-  let missing = 0;
-  for (let i = 1; i <= total; i++) {
-    const got  = !!scannedChunks[i];
-    const cell = document.createElement('div');
-    cell.className = 'stl-cell' + (got ? ' scanned' : '');
-    cell.textContent = i;
+  const wrap  = document.getElementById('tlWrap');
+  const strip = document.getElementById('tlStrip');
+  const stats = document.getElementById('tlStats');
+  const badge = document.getElementById('tlMissBadge');
 
-    if (!got) {
-      missing++;
-      cell.classList.add('missing');
-      cell.dataset.tip = `Jump to #${i} on sender`;
-      cell.title = `Frame ${i} missing — click to highlight`;
-      cell.onclick = () => highlightMissingFrame(i, total);
-    } else {
-      cell.dataset.tip = `#${i} ✓`;
-      cell.onclick = () => showToast(`Frame ${i} already scanned ✓`, true);
-    }
-    grid.appendChild(cell);
+  wrap.style.display = 'block';
+
+  // Count received
+  const got     = Object.keys(scannedChunks).length;
+  const missing = total - got;
+
+  stats.textContent = `${got} / ${total}`;
+  if (missing > 0) {
+    badge.textContent = `${missing} missing`;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
   }
 
-  missCount.textContent = missing > 0 ? `${missing} missing` : '';
-  missCount.style.display = missing > 0 ? 'inline' : 'none';
+  // Determine the "frontier": highest index received so far
+  // Frames below the frontier that are absent = confirmed missing
+  const receivedIdxs = Object.keys(scannedChunks).map(Number);
+  const frontier = receivedIdxs.length ? Math.max(...receivedIdxs) : 0;
+
+  strip.innerHTML = '';
+
+  for (let i = 1; i <= total; i++) {
+    const isGot     = !!scannedChunks[i];
+    const isMissing = !isGot && i < frontier; // only red if we've scanned past it
+    const isLast    = isGot && i === Math.max(...receivedIdxs);
+
+    const cell = document.createElement('div');
+    cell.className = 'tl-cell' + (isGot ? ' got' : isMissing ? ' miss' : '');
+    if (isLast) cell.classList.add('current');
+
+    const num = document.createElement('div');
+    num.className = 'tl-cell-num';
+    num.textContent = i;
+
+    const bar = document.createElement('div');
+    bar.className = 'tl-cell-bar';
+
+    cell.appendChild(num);
+    cell.appendChild(bar);
+
+    if (isMissing) {
+      cell.title = `Frame ${i} missing`;
+      cell.onclick = () => showMissingHint(i, total, frontier);
+    } else if (isGot) {
+      cell.title = `Frame ${i} ✓`;
+      cell.onclick = () => showToast(`Frame ${i} scanned ✓`, true);
+    } else {
+      cell.title = `Frame ${i} — not yet scanned`;
+      cell.onclick = () => showToast(`Frame ${i} not yet reached`, false);
+    }
+
+    strip.appendChild(cell);
+  }
+
+  // Auto-scroll so the current-scan position is visible
+  if (frontier > 0) {
+    const cellW = 31; // 28px + 3px gap
+    const targetScroll = Math.max(0, (frontier - 3) * cellW);
+    const stripWrap = document.querySelector('.tl-strip-wrap');
+    if (stripWrap) stripWrap.scrollLeft = targetScroll;
+  }
 }
 
-// Show a prominent banner telling the user exactly which frame to jump to
-let missBannerTimer = null;
-function highlightMissingFrame(n, total) {
-  // If the ssJumpInput exists (broadcast panel open), pre-fill it
+function showMissingHint(n, total, frontier) {
+  // Find the full missing range around n
+  let rangeStart = n, rangeEnd = n;
+  while (rangeStart > 1 && !scannedChunks[rangeStart - 1]) rangeStart--;
+  while (rangeEnd < frontier - 1 && !scannedChunks[rangeEnd + 1]) rangeEnd++;
+
+  const hint    = document.getElementById('tlHint');
+  const hintTxt = document.getElementById('tlHintText');
+
+  let msg;
+  if (rangeStart === rangeEnd) {
+    msg = `Jump to frame ${n} on the sender screen`;
+  } else {
+    msg = `Jump to frame ${rangeStart} — missing ${rangeStart}–${rangeEnd} (${rangeEnd - rangeStart + 1} frames)`;
+  }
+  hintTxt.textContent = msg;
+  hint.style.display = 'flex';
+
+  // Pre-fill the slideshow jump input if it's accessible
   const jumpInput = document.getElementById('ssJumpInput');
-  if (jumpInput) { jumpInput.value = n; }
+  if (jumpInput) jumpInput.value = rangeStart;
 
-  showToast(`Jump to frame ${n} of ${total} on sender screen`, false);
-
-  // Pulse that cell red briefly to draw attention
-  const cells = document.querySelectorAll('.stl-cell');
-  cells.forEach(c => {
-    if (parseInt(c.textContent) === n) {
-      c.style.outline = '3px solid var(--accent)';
-      clearTimeout(missBannerTimer);
-      missBannerTimer = setTimeout(() => c.style.outline = '', 2500);
-    }
-  });
+  showToast(`Missing: frame${rangeStart === rangeEnd ? '' : 's'} ${rangeStart}${rangeStart !== rangeEnd ? '–' + rangeEnd : ''}`, false);
 }
 
 function setStatus(msg) {
@@ -1430,8 +1541,10 @@ function resetReader() {
   box.textContent = 'Scan QR codes in order — text will appear here…';
   document.getElementById('progressPill').textContent = '0 scanned';
   document.getElementById('progressPill').className = 'progress-pill';
-  document.getElementById('scanTimelineBox').style.display = 'none';
-  document.getElementById('scanTimelineGrid').innerHTML = '<div class="stl-empty">Start scanning to see frame progress…</div>';
+  document.getElementById('tlWrap').style.display = 'none';
+  document.getElementById('tlStrip').innerHTML = '';
+  document.getElementById('tlHint').style.display = 'none';
+  lastKnownTotal = 0;
   setStatus('Align QR code in frame');
   showToast('Reader reset');
 }
