@@ -6,49 +6,41 @@
 <title>QR Test</title>
 <style>
   body { font-family: monospace; padding: 20px; background: #111; color: #fff; }
-  video { width: 100%; max-width: 400px; display: block; }
-  #result { margin-top: 20px; font-size: 18px; color: #0f0; word-break: break-all; }
+  video { width: 100%; max-width: 400px; display: block; border: 2px solid #333; }
+  #result { margin-top: 20px; font-size: 18px; color: #0f0; word-break: break-all; min-height: 40px; }
   #status { margin-top: 10px; color: #aaa; font-size: 13px; }
-  button { margin-top: 16px; padding: 14px 24px; font-size: 16px; cursor: pointer; }
 </style>
 </head>
 <body>
-<h2>QR Scanner Test</h2>
-<button onclick="start()">Start Camera</button>
-<br><br>
-<video id="v" autoplay playsinline></video>
-<canvas id="c" style="display:none"></canvas>
-<div id="status">Not started</div>
+<h2>QR Test — nimiq/qr-scanner</h2>
+<video id="v"></video>
+<div id="status">Starting…</div>
 <div id="result">—</div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
-<script>
-async function start() {
-  document.getElementById('status').textContent = 'Requesting camera...';
+<script type="module">
+  import QrScanner from 'https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js';
+
+  QrScanner.WORKER_PATH = 'https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner-worker.min.js';
+
   const video = document.getElementById('v');
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'environment' }
-  });
-  video.srcObject = stream;
-  video.play();
-  document.getElementById('status').textContent = 'Camera running — scanning every 300ms';
-
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-  setInterval(() => {
-    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-    const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
-    if (code) {
-      document.getElementById('result').textContent = '✓ ' + code.data;
-      document.getElementById('status').textContent = 'Scanned!';
+  const scanner = new QrScanner(
+    video,
+    result => {
+      document.getElementById('result').textContent = '✓ ' + result.data;
+      document.getElementById('status').textContent = 'Scanned at ' + new Date().toLocaleTimeString();
+    },
+    {
+      preferredCamera: 'environment',
+      highlightScanRegion: true,
+      highlightCodeOutline: true,
     }
-  }, 300);
-}
+  );
+
+  scanner.start().then(() => {
+    document.getElementById('status').textContent = 'Camera running — point at a QR code';
+  }).catch(err => {
+    document.getElementById('status').textContent = 'Error: ' + err;
+  });
 </script>
 </body>
 </html>
