@@ -395,7 +395,22 @@
     align-items: center;
   }
 
-  .progress-pill {
+  .copy-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 20px;
+    padding: 2px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); }
+  .copy-btn.copied { background: var(--scan-green); border-color: var(--scan-green); }
     background: var(--accent);
     color: white;
     padding: 2px 8px;
@@ -633,7 +648,7 @@
   <div class="controls-row">
     <div class="ctrl-group">
       <label>Chunk size:</label>
-      <input type="range" id="chunkSize" min="40" max="100" value="100" step="10">
+      <input type="range" id="chunkSize" min="40" max="280" value="100" step="10">
       <span id="chunkSizeVal">100</span> chars
     </div>
     <button class="btn" onclick="generateChain()">Generate Chain</button>
@@ -648,7 +663,7 @@
     <div class="qr-cards" id="qrCards"></div>
     <div class="print-btn-row">
       <button class="btn secondary" onclick="window.print()">🖨 Print all codes</button>
-      <button class="btn" onclick="openSlideshow()">▶ Slideshow</button>
+      <button class="btn" onclick="openSlideshow()">⬡ Broadcast</button>
     </div>
   </div>
 </div>
@@ -676,7 +691,10 @@
     <div class="text-output-box">
       <div class="text-output-header">
         <span>Accumulated Text</span>
-        <span class="progress-pill" id="progressPill">0 scanned</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="copy-btn" onclick="copyText()" id="copyBtn">Copy</button>
+          <span class="progress-pill" id="progressPill">0 scanned</span>
+        </div>
       </div>
       <div id="accumulatedText">Scan QR codes in order — text will appear here…</div>
       <div class="chunk-badges" id="chunkBadges"></div>
@@ -713,7 +731,7 @@
       <span id="ssCodeInfo">Calibration — point your phone camera here</span>
       <div class="ss-speed">
         <button class="ss-spd-btn" onclick="adjustSpeed(-200)">−</button>
-        <span id="ssSpdLabel">1.5s</span>
+        <span id="ssSpdLabel">0.5s</span>
         <button class="ss-spd-btn" onclick="adjustSpeed(200)">+</button>
       </div>
     </div>
@@ -730,8 +748,24 @@ function switchTab(t) {
   document.querySelectorAll('.tab').forEach((b,i) => b.classList.toggle('active', (i===0&&t==='generate')||(i===1&&t==='read')));
   document.getElementById('generatePanel').classList.toggle('active', t==='generate');
   document.getElementById('readPanel').classList.toggle('active', t==='read');
-  if (t==='read' && !cameraStarted) { /* wait for user */ }
 }
+
+// ═══════════════════════════════════════════
+//  LOCALSTORAGE — restore saved text
+// ═══════════════════════════════════════════
+const textInput = document.getElementById('textInput');
+const STORAGE_KEY = 'qrchain-text';
+
+// Load saved text on startup
+try {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) textInput.value = saved;
+} catch(e) {}
+
+// Save on every keystroke
+textInput.addEventListener('input', () => {
+  try { localStorage.setItem(STORAGE_KEY, textInput.value); } catch(e) {}
+});
 
 // ═══════════════════════════════════════════
 //  GENERATE
@@ -805,6 +839,7 @@ function clearGen() {
   document.getElementById('qrSequence').style.display = 'none';
   document.getElementById('qrCards').innerHTML = '';
   ssChunks = [];
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
 }
 
 // ═══════════════════════════════════════════
@@ -937,7 +972,7 @@ function resetReader() {
 let ssChunks    = [];
 let ssInterval  = null;
 let ssCurrent   = -1; // -1 = calibration phase
-let ssSpeed     = 1500; // ms per code
+let ssSpeed     = 500; // ms per code
 let ssLoopCount = 0;
 
 const CAL_PAYLOAD = encodeURIComponent('QRCAL|Calibration — point camera here and hold steady');
@@ -1001,7 +1036,7 @@ function showSlide(idx) {
 }
 
 function adjustSpeed(delta) {
-  ssSpeed = Math.min(4000, Math.max(400, ssSpeed + delta));
+  ssSpeed = Math.min(4000, Math.max(200, ssSpeed + delta));
   document.getElementById('ssSpdLabel').textContent = (ssSpeed / 1000).toFixed(1) + 's';
   if (ssInterval) {
     clearInterval(ssInterval);
@@ -1025,6 +1060,20 @@ function closeModal(e) {
   if (e.target === document.getElementById('textModal')) {
     document.getElementById('textModal').classList.remove('open');
   }
+}
+
+// ═══════════════════════════════════════════
+//  COPY TEXT
+// ═══════════════════════════════════════════
+function copyText() {
+  const text = document.getElementById('accumulatedText').textContent;
+  if (!text || text.startsWith('Scan QR')) { showToast('Nothing to copy yet'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => showToast('Copy failed'));
 }
 
 // ═══════════════════════════════════════════
