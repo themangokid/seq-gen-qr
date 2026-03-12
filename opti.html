@@ -493,9 +493,107 @@
     100% { background: white; }
   }
 
-  .chunk-badges { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-top: 1px solid #eee; }
-  .chunk-badge { font-size: 10px; padding: 2px 8px; border: 1px solid #ddd; border-radius: 20px; color: #bbb; letter-spacing: 0.04em; }
-  .chunk-badge.scanned { background: var(--scan-green); border-color: var(--scan-green); color: white; }
+  /* ── SCAN TIMELINE ── */
+  .scan-timeline-box {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    margin-top: 0;
+  }
+  .scan-timeline-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 8px 14px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .scan-timeline-legend {
+    display: flex;
+    gap: 10px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.6);
+  }
+  .scan-timeline-legend span { display: flex; align-items: center; gap: 4px; }
+  .legend-dot {
+    width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
+  }
+  .legend-dot.got  { background: var(--scan-green); }
+  .legend-dot.miss { background: #444; border: 1px solid #666; }
+
+  .scan-timeline-grid {
+    padding: 12px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .stl-cell {
+    width: 36px;
+    height: 30px;
+    border-radius: 3px;
+    border: 1.5px solid #ddd;
+    background: #f8f8f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: #bbb;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s, transform 0.1s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+  }
+  .stl-cell:hover { border-color: var(--ink); color: var(--ink); transform: scale(1.08); z-index: 1; }
+  .stl-cell.scanned {
+    background: var(--scan-green);
+    border-color: var(--scan-green);
+    color: white;
+  }
+  .stl-cell.scanned:hover { background: #1e8449; border-color: #1e8449; }
+  .stl-cell.missing {
+    background: #fff3f3;
+    border-color: #e74c3c;
+    color: #e74c3c;
+    animation: pulseMiss 1.8s ease-in-out infinite;
+  }
+  @keyframes pulseMiss {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+    50%       { box-shadow: 0 0 0 3px rgba(231,76,60,0.25); }
+  }
+
+  .stl-empty {
+    padding: 20px;
+    font-size: 11px;
+    color: #bbb;
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+  /* Tooltip that appears on hover showing "Jump to #N on sender" */
+  .stl-cell[data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 5px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 9px;
+    white-space: nowrap;
+    padding: 3px 7px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 100;
+  }
 
   .read-controls { display: flex; gap: 10px; flex-wrap: wrap; }
 
@@ -749,7 +847,6 @@
         </div>
       </div>
       <div id="accumulatedText">Scan QR codes in order — text will appear here…</div>
-      <div class="chunk-badges" id="chunkBadges"></div>
       <div id="fileDownloadBox" class="file-download-box" style="display:none">
         <div class="file-download-icon">🖼</div>
         <div class="file-download-info">
@@ -757,6 +854,20 @@
           <div class="file-download-sub" id="fileDownloadSub"></div>
         </div>
         <button class="file-download-btn" onclick="downloadReceivedFile()">⬇ Download</button>
+      </div>
+    </div>
+
+    <!-- Frame timeline -->
+    <div class="scan-timeline-box" id="scanTimelineBox" style="display:none">
+      <div class="scan-timeline-header">
+        <span>Frame Timeline <span id="tlMissCount" style="margin-left:6px;background:var(--accent);padding:1px 7px;border-radius:20px;font-size:10px;"></span></span>
+        <div class="scan-timeline-legend">
+          <span><span class="legend-dot got"></span>Got</span>
+          <span><span class="legend-dot miss"></span>Missing — click to highlight on sender</span>
+        </div>
+      </div>
+      <div class="scan-timeline-grid" id="scanTimelineGrid">
+        <div class="stl-empty">Start scanning to see frame progress…</div>
       </div>
     </div>
   </div>
@@ -993,11 +1104,16 @@ async function generateChain() {
   const collapsed = collapseWhitespace(raw);
   const collapsedLen = collapsed.length;
 
-  // OPT 3: try deflate if enabled and text is long enough to benefit
+  // OPT 3: try deflate if enabled, text is long enough, and it's NOT image/binary data.
+  // JPEG base64 is already compressed — deflating it typically makes it LARGER.
+  // Heuristic: if >60% of chars are base64 alphabet and text is very long, skip deflate.
   let textToChunk = collapsed;
-  let compressed = false;
+  let compressed  = false;
 
-  if (useDeflate && collapsed.length > 200) {
+  const looksLikeBinaryB64 = collapsed.length > 500 &&
+    (collapsed.match(/[A-Za-z0-9+/=]{200,}/g) || []).join('').length > collapsed.length * 0.6;
+
+  if (useDeflate && !looksLikeBinaryB64 && collapsed.length > 200) {
     try {
       const deflated = await compressText(collapsed);
       // Only use if it actually saves space (short texts can expand)
@@ -1210,7 +1326,7 @@ async function processQR(data) {
   scannedChunks[idx] = payload;
 
   await updateTextDisplay();
-  updateBadges(total);
+  updateTimeline(total);
   showToast(`Code ${idx}/${total} scanned`, true);
   setStatus(`✓ Got code ${idx}/${total}. ${Object.keys(scannedChunks).length < total ? 'Scan next…' : 'Complete!'}`);
 
@@ -1248,15 +1364,56 @@ async function updateTextDisplay() {
   pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
 }
 
-function updateBadges(total) {
-  const container = document.getElementById('chunkBadges');
-  container.innerHTML = '';
+// ── SCAN TIMELINE (replaces chunk badges) ──
+function updateTimeline(total) {
+  const box  = document.getElementById('scanTimelineBox');
+  const grid = document.getElementById('scanTimelineGrid');
+  const missCount = document.getElementById('tlMissCount');
+  box.style.display = 'block';
+  grid.innerHTML = '';
+
+  let missing = 0;
   for (let i = 1; i <= total; i++) {
-    const b = document.createElement('span');
-    b.className = 'chunk-badge' + (scannedChunks[i] ? ' scanned' : '');
-    b.textContent = `#${i}`;
-    container.appendChild(b);
+    const got  = !!scannedChunks[i];
+    const cell = document.createElement('div');
+    cell.className = 'stl-cell' + (got ? ' scanned' : '');
+    cell.textContent = i;
+
+    if (!got) {
+      missing++;
+      cell.classList.add('missing');
+      cell.dataset.tip = `Jump to #${i} on sender`;
+      cell.title = `Frame ${i} missing — click to highlight`;
+      cell.onclick = () => highlightMissingFrame(i, total);
+    } else {
+      cell.dataset.tip = `#${i} ✓`;
+      cell.onclick = () => showToast(`Frame ${i} already scanned ✓`, true);
+    }
+    grid.appendChild(cell);
   }
+
+  missCount.textContent = missing > 0 ? `${missing} missing` : '';
+  missCount.style.display = missing > 0 ? 'inline' : 'none';
+}
+
+// Show a prominent banner telling the user exactly which frame to jump to
+let missBannerTimer = null;
+function highlightMissingFrame(n, total) {
+  // If the ssJumpInput exists (broadcast panel open), pre-fill it
+  const jumpInput = document.getElementById('ssJumpInput');
+  if (jumpInput) { jumpInput.value = n; }
+
+  showToast(`Jump to frame ${n} of ${total} on sender screen`, false);
+
+  // Pulse that cell red briefly to draw attention
+  const cells = document.querySelectorAll('.stl-cell');
+  cells.forEach(c => {
+    if (parseInt(c.textContent) === n) {
+      c.style.outline = '3px solid var(--accent)';
+      clearTimeout(missBannerTimer);
+      missBannerTimer = setTimeout(() => c.style.outline = '', 2500);
+    }
+  });
 }
 
 function setStatus(msg) {
@@ -1273,7 +1430,8 @@ function resetReader() {
   box.textContent = 'Scan QR codes in order — text will appear here…';
   document.getElementById('progressPill').textContent = '0 scanned';
   document.getElementById('progressPill').className = 'progress-pill';
-  document.getElementById('chunkBadges').innerHTML = '';
+  document.getElementById('scanTimelineBox').style.display = 'none';
+  document.getElementById('scanTimelineGrid').innerHTML = '<div class="stl-empty">Start scanning to see frame progress…</div>';
   setStatus('Align QR code in frame');
   showToast('Reader reset');
 }
@@ -1733,16 +1891,24 @@ function handleImgSendDrop(e) {
 }
 function handleImgSendSelect(e) { const f = e.target.files[0]; if (f) prepareImgSend(f); e.target.value = ''; }
 
+// srcOrigB64 holds the original file's base64 so we can clamp output size
+let srcOrigB64 = '';
+
 function prepareImgSend(file) {
-  imgSendFile = file;
-  imgSendMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+  imgSendFile  = file;
+  // Always use JPEG for the send path — quality slider is meaningful on JPEG only.
+  // PNG is lossless so quality param does nothing and files can be huge.
+  imgSendMime  = 'image/jpeg';
+  srcOrigBytes = file.size;
   document.getElementById('imgSendName').textContent  = file.name;
   document.getElementById('imgSendStats').textContent = 'Loading…';
+
   const reader = new FileReader();
   reader.onload = (e) => {
     const dataUrl = e.target.result;
-    srcOrigBytes  = file.size;
-    const img     = new Image();
+    srcOrigB64    = dataUrl.split(',')[1]; // keep original for size clamping
+
+    const img = new Image();
     img.onload = () => {
       srcImg = img;
       document.getElementById('imgSendThumb').src = dataUrl;
@@ -1759,31 +1925,48 @@ function prepareImgSend(file) {
 
 function updateImgPreview(qualVal) {
   document.getElementById('imgQualityVal').textContent = qualVal;
-  document.getElementById('imgMaxWVal').textContent = document.getElementById('imgMaxW').value;
+  document.getElementById('imgMaxWVal').textContent    = document.getElementById('imgMaxW').value;
   if (!srcImg) return;
+
   const maxW    = parseInt(document.getElementById('imgMaxW').value);
   const quality = parseInt(qualVal) / 100;
   const scale   = Math.min(1, maxW / srcImg.naturalWidth);
   const w = Math.round(srcImg.naturalWidth  * scale);
   const h = Math.round(srcImg.naturalHeight * scale);
+
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   canvas.getContext('2d').drawImage(srcImg, 0, 0, w, h);
-  const dataUrl = canvas.toDataURL(imgSendMime, quality);
-  imgSendB64 = dataUrl.split(',')[1];
+
+  // Always encode as JPEG — quality slider is effective here
+  const dataUrl    = canvas.toDataURL('image/jpeg', quality);
+  const candidateB64 = dataUrl.split(',')[1];
+
+  // Clamp: never let re-encoding produce a larger payload than the original.
+  // This happens with low-res or already-compressed images at high quality.
+  if (srcOrigB64 && candidateB64.length > srcOrigB64.length) {
+    imgSendB64 = srcOrigB64;
+  } else {
+    imgSendB64 = candidateB64;
+    // Update thumbnail to reflect the re-encoded result
+    document.getElementById('imgSendThumb').src = dataUrl;
+  }
+
   const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
-  const payloadLen = imgSendFile.name.length + imgSendMime.length + 2 + imgSendB64.length;
+  const payloadLen = imgSendFile.name.length + 'image/jpeg'.length + 2 + imgSendB64.length;
   const codes      = Math.ceil(payloadLen / chunkSize);
-  const compKB     = (imgSendB64.length * 0.75 / 1024).toFixed(1);
+  const outKB      = (imgSendB64.length * 0.75 / 1024).toFixed(1);
   const origKB     = (srcOrigBytes / 1024).toFixed(1);
+  const saved      = Math.round((1 - imgSendB64.length / (srcOrigB64.length || 1)) * 100);
+  const savedStr   = saved > 0 ? ` ↓${saved}%` : '';
   document.getElementById('imgSendStats').textContent =
-    `${w}×${h}px · ${origKB}KB → ${compKB}KB · ~${codes} QR codes`;
+    `${w}×${h}px · ${origKB}KB → ${outKB}KB${savedStr} · ~${codes} QR codes`;
 }
 
 function encodeImageChain() {
   if (!imgSendB64) { showToast('No image loaded'); return; }
   const fname      = imgSendFile.name;
-  const payload    = `${fname}|${imgSendMime}|${imgSendB64}`;
+  const payload    = `${fname}|image/jpeg|${imgSendB64}`;
   const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
   const total      = Math.ceil(payload.length / chunkSize);
   const qrfChunks  = [];
@@ -1802,7 +1985,7 @@ function encodeImageChain() {
 }
 
 function clearImgSend() {
-  imgSendFile = imgSendB64 = null; srcImg = null;
+  imgSendFile = imgSendB64 = null; srcImg = null; srcOrigB64 = '';
   document.getElementById('imgSendPreview').style.display = 'none';
   document.getElementById('imgSendZone').style.display    = 'block';
   document.getElementById('imgSendThumb').src = '';
@@ -1830,7 +2013,7 @@ function processFileQR(data) {
   const got = Object.keys(fileChunks).length;
   showToast(`Image chunk ${idx}/${total}`, true);
   setStatus(`Image: ${got}/${total} chunks`);
-  updateBadges(total);
+  updateTimeline(total);
   if (got === total) assembleFile(total);
 }
 
