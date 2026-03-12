@@ -722,7 +722,7 @@
 
 <div id="toast"></div>
 
-<script type="module">
+<script>
 // ═══════════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════════
@@ -810,8 +810,6 @@ function clearGen() {
 // ═══════════════════════════════════════════
 //  READ / SCAN  (nimiq/qr-scanner)
 // ═══════════════════════════════════════════
-import QrScanner from 'https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js';
-
 let cameraStarted = false;
 let qrScanner     = null;
 let scannedChunks = {};
@@ -827,19 +825,22 @@ async function startCamera() {
   document.getElementById('startCamBtn').disabled = true;
   cameraStarted = true;
 
-  qrScanner = new QrScanner(
-    // nimiq needs a video element — create one inside #reader
-    (() => { const v = document.createElement('video'); readerEl.appendChild(v); return v; })(),
-    result => processQR(result.data),
-    {
-      preferredCamera: 'environment',
-      highlightScanRegion: true,
-      highlightCodeOutline: true,
-      returnDetailedScanResult: true,
-    }
-  );
-
   try {
+    const { default: QrScanner } = await import('https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js');
+    const video = document.createElement('video');
+    readerEl.appendChild(video);
+
+    qrScanner = new QrScanner(
+      video,
+      result => processQR(result.data),
+      {
+        preferredCamera: 'environment',
+        highlightScanRegion: true,
+        highlightCodeOutline: true,
+        returnDetailedScanResult: true,
+      }
+    );
+
     await qrScanner.start();
     setStatus('Camera running — point at a QR code');
   } catch(e) {
