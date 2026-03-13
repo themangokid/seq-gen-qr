@@ -1426,6 +1426,7 @@ async function startCamera() {
       video,
       result => processQR(result.data),
       {
+        onDecodeError: () => {}, // suppress "No image detected" / "No QR code found"
         preferredCamera: 'environment',
         highlightScanRegion: true,
         highlightCodeOutline: true,
@@ -2189,8 +2190,15 @@ async function loadImage(file) {
       }
     });
 
-    const { data: { text } } = await worker.recognize(file);
-    await worker.terminate();
+    const blobUrl = URL.createObjectURL(file);
+    let text = '';
+    try {
+      const { data } = await worker.recognize(blobUrl);
+      text = data.text;
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+      await worker.terminate();
+    }
 
     const cleaned = text.trim();
     fill.style.width  = '100%';
