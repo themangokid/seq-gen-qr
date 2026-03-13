@@ -1,0 +1,2321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Chain</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;900&display=swap');
+
+  :root {
+    --ink: #0f0e0d;
+    --paper: #f5f0e8;
+    --paper2: #ede8dc;
+    --accent: #c0392b;
+    --accent2: #2c3e50;
+    --scan-green: #27ae60;
+    --border: #0f0e0d;
+    --radius: 2px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    border-bottom: 3px solid var(--border);
+    padding: 20px 32px 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    background: var(--paper);
+  }
+
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(24px, 5vw, 38px);
+    font-weight: 900;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  header .tagline {
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 3px solid var(--border);
+  }
+
+  .tab {
+    flex: 1;
+    padding: 14px 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    background: var(--paper2);
+    color: #888;
+    transition: all 0.15s;
+    border-right: 2px solid var(--border);
+  }
+
+  .tab:last-child { border-right: none; }
+  .tab.active { background: var(--ink); color: var(--paper); }
+
+  .btn-broadcast {
+    margin-left: auto;
+    border-radius: 0;
+    border: none;
+    border-left: 2px solid var(--border);
+    background: var(--accent);
+    color: white;
+    padding: 14px 20px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .btn-broadcast:hover { background: #a93226; }
+
+  .panel { display: none; padding: 16px; }
+  .panel.active { display: block; }
+  @media (min-width: 480px) { .panel { padding: 28px 24px; } }
+
+  /* ── COMPRESSION BADGE ── */
+  .compression-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--scan-green);
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: 10px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .compression-badge.visible { opacity: 1; }
+
+  /* ── GENERATE PANEL ── */
+  .gen-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 8px;
+  }
+
+  /* Drop zones */
+  .pdf-drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: var(--radius);
+    background: white;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 12px;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pdf-drop-zone:hover, .pdf-drop-zone.drag-over {
+    border-color: var(--ink);
+    background: var(--paper2);
+  }
+  .pdf-drop-zone.drag-over { border-style: solid; }
+
+  .drop-type-btn {
+    text-decoration: underline;
+    cursor: pointer;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .drop-type-btn:hover { color: var(--accent); }
+
+  .pdf-drop-icon { font-size: 28px; margin-bottom: 6px; opacity: 0.4; }
+  .pdf-drop-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .pdf-drop-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #aaa;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  .pdf-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: white;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    flex-wrap: wrap;
+  }
+  .pdf-file-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #555;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pdf-action-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: var(--radius);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pdf-action-btn.reload:hover { background: var(--ink); color: var(--paper); }
+  .pdf-action-btn.remove:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .pdf-progress { margin-bottom: 12px; }
+  .pdf-progress-bar { height: 3px; background: var(--paper2); border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+  .pdf-progress-fill { height: 100%; background: var(--ink); border-radius: 2px; width: 0%; transition: width 0.2s ease; }
+  .pdf-progress-label { font-family: 'DM Mono', monospace; font-size: 10px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  textarea {
+    width: 100%;
+    height: 140px;
+    padding: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    line-height: 1.6;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    color: var(--ink);
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  textarea:focus { border-color: var(--accent); }
+
+  .controls-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #666;
+  }
+  .ctrl-group label { white-space: nowrap; }
+  input[type=range] { width: 90px; accent-color: var(--accent); }
+
+  .btn {
+    padding: 13px 22px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--ink);
+    color: var(--paper);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:hover { background: var(--accent); border-color: var(--accent); }
+  .btn.secondary { background: transparent; color: var(--ink); }
+  .btn.secondary:hover { background: var(--paper2); }
+
+  /* QR sequence */
+  #qrSequence { margin-top: 24px; }
+
+  .seq-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+  .seq-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; }
+  .seq-count { font-size: 11px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .qr-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media (min-width: 400px) { .qr-cards { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; } }
+
+  .qr-card {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    overflow: hidden;
+    animation: slideIn 0.3s ease forwards;
+    opacity: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s;
+  }
+  .qr-card:active { transform: scale(0.97); }
+
+  /* Modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--paper);
+    border: 3px solid var(--border);
+    border-radius: var(--radius);
+    max-width: 480px;
+    width: 100%;
+    overflow: hidden;
+    animation: slideIn 0.2s ease forwards;
+  }
+  .modal-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 16px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-close { background: none; border: none; color: var(--paper); font-size: 20px; cursor: pointer; line-height: 1; padding: 0 2px; opacity: 0.7; }
+  .modal-close:hover { opacity: 1; }
+  .modal-body {
+    padding: 20px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--ink);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .qr-card-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 6px 10px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+  }
+  .qr-card img { width: 100%; aspect-ratio: 1; display: block; }
+  .qr-card-preview {
+    padding: 8px 10px;
+    font-size: 10px;
+    color: #777;
+    line-height: 1.5;
+    border-top: 1px solid #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .page-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--paper2);
+    flex-wrap: wrap;
+  }
+  .page-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .page-btn:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+  .page-btn:disabled { opacity: 0.25; cursor: default; }
+  .page-stack { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .page-pip-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .page-pip {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 9px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    color: var(--ink);
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .page-pip-wrap:hover .page-pip { background: var(--paper2); }
+  .page-pip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .page-pip-label { font-size: 9px; color: #bbb; font-family: 'DM Mono', monospace; white-space: nowrap; }
+  .page-pip.active + .page-pip-label { color: var(--ink); }
+
+  .print-btn-row { margin-top: 16px; display: flex; gap: 10px; }
+
+  /* ── READ PANEL ── */
+  .read-layout { display: flex; flex-direction: column; gap: 20px; }
+  .scanner-box { border: 2px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #111; position: relative; }
+  #reader { width: 100%; min-height: 260px; }
+  #reader video { width: 100% !important; height: auto !important; max-height: 320px; object-fit: cover; }
+  .camera-start { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; gap: 14px; background: #111; min-height: 200px; }
+  .camera-start p { color: #aaa; font-size: 12px; text-align: center; letter-spacing: 0.04em; }
+  .scanner-status { background: rgba(0,0,0,0.7); color: white; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 14px; text-align: center; }
+
+  .text-output-box { border: 2px solid var(--border); border-radius: var(--radius); background: white; }
+  .text-output-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 8px 14px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .copy-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 20px;
+    padding: 2px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); }
+  .copy-btn.copied { background: var(--scan-green); border-color: var(--scan-green); }
+
+  .progress-pill {
+    background: var(--accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+  }
+  .progress-pill.done { background: var(--scan-green); }
+
+  #accumulatedText {
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--ink);
+    min-height: 120px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .flash-new { animation: flashNew 0.6s ease; }
+  @keyframes flashNew {
+    0% { background: #fffde0; }
+    100% { background: white; }
+  }
+
+  /* ── SCAN TIMELINE (film strip, below camera) ── */
+  .tl-wrap {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: #1a1a18;
+    overflow: hidden;
+    /* Full width, never shrinks — sits between camera and text box */
+    width: 100%;
+    flex-shrink: 0;
+  }
+
+  .tl-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    background: #111;
+    border-bottom: 1px solid #333;
+  }
+
+  .tl-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #777;
+    white-space: nowrap;
+  }
+
+  .tl-stats {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #aaa;
+    flex: 1;
+  }
+
+  .tl-missing-badge {
+    background: var(--accent);
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 2px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* Horizontal scrolling strip */
+  .tl-strip-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 10px 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+  }
+  .tl-strip-wrap::-webkit-scrollbar { height: 4px; }
+  .tl-strip-wrap::-webkit-scrollbar-track { background: transparent; }
+  .tl-strip-wrap::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .tl-strip {
+    display: flex;
+    gap: 3px;
+    min-width: max-content;
+    align-items: flex-end;
+  }
+
+  /* Each cell = one QR frame */
+  .tl-cell {
+    flex-shrink: 0;
+    width: 28px;
+    height: 36px;
+    border-radius: 3px;
+    background: #2a2a28;
+    border: 1.5px solid #3a3a38;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+  }
+
+  .tl-cell:hover { transform: scaleY(1.12); border-color: #888; z-index: 1; }
+
+  .tl-cell-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 7.5px;
+    color: #555;
+    line-height: 1;
+  }
+
+  .tl-cell-bar {
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+    background: #3a3a38;
+    transition: background 0.2s;
+  }
+
+  /* States */
+  .tl-cell.got { background: #1a3d27; border-color: var(--scan-green); }
+  .tl-cell.got .tl-cell-num { color: var(--scan-green); }
+  .tl-cell.got .tl-cell-bar { background: var(--scan-green); }
+
+  .tl-cell.miss { background: #2d1414; border-color: #c0392b; animation: tlPulse 1.6s ease-in-out infinite; }
+  .tl-cell.miss .tl-cell-num { color: #e74c3c; }
+  .tl-cell.miss .tl-cell-bar { background: #e74c3c; }
+
+  /* Only pulse on cells that are actually identified as missing (totalChunks known) */
+  @keyframes tlPulse {
+    0%, 100% { box-shadow: none; }
+    50%       { box-shadow: 0 0 0 2px rgba(192,57,43,0.4); }
+  }
+
+  /* Current-scan cursor: the last-scanned cell gets a highlight ring */
+  .tl-cell.current { outline: 2px solid #f39c12; outline-offset: 1px; }
+
+  /* Hint bar shown when a missing frame is tapped */
+  .tl-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--accent);
+    border-top: 1px solid #a93226;
+  }
+
+  .tl-hint-icon { font-size: 14px; color: white; flex-shrink: 0; }
+
+  #tlHintText {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    flex: 1;
+    letter-spacing: 0.03em;
+  }
+
+  .tl-hint-dismiss {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tl-hint-dismiss:hover { background: rgba(255,255,255,0.35); }
+
+  .read-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: transform 0.3s ease;
+    z-index: 10000;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.green { background: var(--scan-green); }
+
+  /* Print */
+  @media print {
+    header, .tabs, #generatePanel .controls-row, .print-btn-row,
+    #readPanel, textarea, .gen-label { display: none !important; }
+    .panel { display: block !important; padding: 0; }
+    .seq-header { break-inside: avoid; }
+    .qr-cards { grid-template-columns: repeat(3, 1fr); }
+    .qr-card { break-inside: avoid; }
+    body::before { display: none; }
+  }
+
+  /* ── SLIDESHOW ── */
+  #slideshow { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; }
+
+  /* Top bar */
+  .ss-top { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0d0d0d; border-bottom: 1px solid #222; gap: 16px; }
+  .ss-top-left { display: flex; align-items: baseline; gap: 12px; }
+  #ssLabel { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #555; }
+  .ss-loop-tag { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #f39c12; background: rgba(243,156,18,0.12); border: 1px solid rgba(243,156,18,0.3); padding: 2px 8px; border-radius: 20px; display: none; }
+  .ss-loop-tag.visible { display: inline; }
+  .ss-close { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; background: #222; color: #aaa; border: none; padding: 7px 14px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .ss-close:hover { background: var(--accent); color: #fff; }
+
+  .ss-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; min-height: 0; position: relative; }
+
+  .ss-qr-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+  #ssQrImg {
+    width: min(85vw, 85vh);
+    height: min(85vw, 85vh);
+    object-fit: contain;
+    border-radius: 6px;
+    background: #fff;
+    padding: 16px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 8px 40px rgba(0,0,0,0.6);
+    display: block;
+  }
+
+
+
+
+  /* Bottom controls */
+  .ss-bottom { padding: 10px 20px 16px; background: #0d0d0d; border-top: 1px solid #222; }
+  .ss-progress-track { height: 3px; background: #222; border-radius: 2px; margin-bottom: 10px; overflow: hidden; cursor: pointer; }
+  .ss-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width linear; }
+  .ss-progress-bar.calibration { background: #f39c12; }
+
+  .ss-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  .ss-jump { display: flex; align-items: center; gap: 6px; }
+  .ss-jump-btn { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); color: #ccc; border-radius: 4px; width: 34px; height: 32px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.12s; -webkit-tap-highlight-color: transparent; }
+  .ss-jump-btn:hover { background: rgba(255,255,255,0.16); }
+  .ss-jump-input-wrap { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
+  .ss-jump-input { background: rgba(255,255,255,0.07); border: none; color: #fff; font-family: 'DM Mono', monospace; font-size: 13px; width: 52px; height: 32px; padding: 0 8px; text-align: center; outline: none; -moz-appearance: textfield; }
+  .ss-jump-input::-webkit-outer-spin-button, .ss-jump-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .ss-jump-input::placeholder { color: rgba(255,255,255,0.25); }
+  .ss-jump-go { background: rgba(255,255,255,0.12); border: none; border-left: 1px solid rgba(255,255,255,0.15); color: #ccc; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; height: 32px; padding: 0 10px; cursor: pointer; transition: background 0.12s; }
+  .ss-jump-go:hover { background: rgba(255,255,255,0.24); }
+
+  .ss-speed { display: flex; align-items: center; gap: 6px; }
+  .ss-spd-btn { background: #222; color: #aaa; border: none; width: 30px; height: 30px; border-radius: 2px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .ss-spd-btn:hover { background: #333; color: #fff; }
+  #ssSpdLabel { font-family: 'DM Mono', monospace; font-size: 11px; color: #666; min-width: 36px; text-align: center; }
+
+  /* ── HAMBURGER ── */
+  header { position: relative; }
+  .hamburger { margin-left: auto; background: none; border: none; cursor: pointer; padding: 6px; display: flex; flex-direction: column; gap: 5px; -webkit-tap-highlight-color: transparent; }
+  .hamburger span { display: block; width: 22px; height: 2px; background: var(--ink); border-radius: 2px; transition: background 0.15s; }
+  .hamburger:hover span { background: var(--accent); }
+
+  /* ── SETTINGS DRAWER ── */
+  #settingsDrawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(400px, 95vw);
+    background: var(--paper);
+    border-left: 3px solid var(--border);
+    z-index: 3001;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+  }
+  #settingsDrawer.open { transform: translateX(0); }
+  .drw-header { background: var(--ink); color: var(--paper); padding: 16px 20px; font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .drw-close { background: none; border: none; color: var(--paper); font-size: 20px; cursor: pointer; opacity: 0.7; line-height: 1; }
+  .drw-close:hover { opacity: 1; }
+  .drw-section { padding: 20px; border-bottom: 1px solid var(--paper2); }
+  .drw-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #888; margin-bottom: 12px; }
+  .drw-presets { display: flex; flex-direction: column; gap: 8px; }
+  .preset-btn { background: white; border: 2px solid var(--border); border-radius: var(--radius); padding: 10px 14px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .preset-btn:hover { background: var(--ink); color: var(--paper); }
+  .drw-speed-input { width: 90px; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 16px; border: 2px solid var(--border); border-radius: var(--radius); background: white; color: var(--ink); outline: none; transition: border-color 0.15s; -moz-appearance: textfield; }
+  .drw-speed-input:focus { border-color: var(--accent); }
+  .drw-speed-input::-webkit-outer-spin-button, .drw-speed-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .img-send-zone { margin-top: 10px; }
+  #imgSendPreview { margin-top: 10px; padding: 12px; border: 2px solid var(--border); border-radius: var(--radius); background: white; }
+  .img-send-preview-inner { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+  .img-send-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 2px; border: 1px solid var(--paper2); flex-shrink: 0; }
+  .img-send-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .img-send-filename { font-family: "DM Mono", monospace; font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .img-send-stats { font-family: "DM Mono", monospace; font-size: 10px; color: #888; }
+  .img-send-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .img-quality-row { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .img-quality-label { font-family: "DM Mono", monospace; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .file-download-box { margin-top: 12px; padding: 14px; border: 2px solid var(--scan-green); border-radius: var(--radius); background: white; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .file-download-icon { font-size: 28px; flex-shrink: 0; }
+  .file-download-info { flex: 1; font-family: "DM Mono", monospace; }
+  .file-download-name { font-size: 12px; font-weight: 500; color: var(--ink); }
+  .file-download-sub { font-size: 10px; color: #888; margin-top: 2px; }
+  .file-download-btn { font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 16px; background: var(--scan-green); color: white; border: none; border-radius: var(--radius); cursor: pointer; transition: opacity 0.15s; }
+  .file-download-btn:hover { opacity: 0.85; }
+  .drw-add-btn { display: block; width: 100%; margin-top: 10px; padding: 8px 0; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; background: none; border: 1.5px dashed #ccc; border-radius: var(--radius); cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .drw-add-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .drw-add-preset { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .drw-preset-name-input { width: 100%; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 13px; border: 2px solid var(--border); border-radius: var(--radius); background: white; color: var(--ink); outline: none; box-sizing: border-box; transition: border-color 0.15s; }
+  .drw-preset-name-input:focus { border-color: var(--accent); }
+  .drw-add-preset-row { display: flex; gap: 8px; }
+  .preset-btn-custom { position: relative; }
+  .preset-btn-delete { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,0.12); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .preset-btn-delete:hover { background: var(--accent); color: white; }
+  .preset-btn:hover .preset-sub { color: #aaa; }
+  .preset-name { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; }
+  .preset-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: #888; }
+  #settingsDrawer input[type=range] { width: 100%; accent-color: var(--accent); }
+  .drw-hint { font-size: 11px; color: #aaa; margin-top: 10px; line-height: 1.5; }
+  canvas#qrCanvas { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>QR Chain</h1>
+  <span class="tagline">Sequential text via QR codes</span>
+  <button class="hamburger" onclick="openSettings()" aria-label="Settings">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('generate')">① Generate</button>
+  <button class="tab" onclick="switchTab('read')">② Read / Scan</button>
+  <button class="btn btn-broadcast" id="broadcastBtn" onclick="openSlideshow()" style="display:none">⬡ Broadcast</button>
+</div>
+
+<div id="generatePanel" class="panel active">
+
+  <!-- Drop zone 1: Parse PDF or Image → Text -->
+  <div id="pdfDropZone" class="pdf-drop-zone"
+       ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+    <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="handleFileSelect(event)">
+    <input type="file" id="imgFileInput" accept="image/*" style="display:none" onchange="handleImgSelect(event)">
+    <div class="pdf-drop-icon">⬡</div>
+    <div class="pdf-drop-label">Parse PDF or Image → Text</div>
+    <div class="pdf-drop-sub">Extracts readable text via PDF parsing or OCR</div>
+    <div style="margin-top:6px">
+      <span class="drop-type-btn" onclick="document.getElementById('pdfFileInput').click()">Browse PDF</span>
+      &nbsp;·&nbsp;
+      <span class="drop-type-btn" onclick="document.getElementById('imgFileInput').click()">Browse Image</span>
+    </div>
+  </div>
+
+  <div id="pdfActions" class="pdf-actions" style="display:none">
+    <span id="pdfFileName" class="pdf-file-name"></span>
+    <button class="pdf-action-btn reload" onclick="reloadPdf()">↺ Reload</button>
+    <button class="pdf-action-btn remove" onclick="removePdf()">✕ Remove</button>
+  </div>
+
+  <div id="pdfProgress" class="pdf-progress" style="display:none">
+    <div class="pdf-progress-bar"><div class="pdf-progress-fill" id="pdfProgressFill"></div></div>
+    <div class="pdf-progress-label" id="pdfProgressLabel">Reading PDF…</div>
+  </div>
+
+  <!-- Drop zone 2: Send Image File via QR -->
+  <div id="imgSendZone" class="pdf-drop-zone img-send-zone"
+       ondragover="handleImgSendDragOver(event)" ondragleave="handleImgSendDragLeave(event)"
+       ondrop="handleImgSendDrop(event)" onclick="document.getElementById('imgSendFileInput').click()">
+    <input type="file" id="imgSendFileInput" accept="image/*" style="display:none" onchange="handleImgSendSelect(event)">
+    <div class="pdf-drop-icon" style="opacity:0.35">▦</div>
+    <div class="pdf-drop-label">Send Image File via QR</div>
+    <div class="pdf-drop-sub">Compresses &amp; encodes the actual image into a QR chain<br>Receiver scans and downloads the file</div>
+  </div>
+
+  <div id="imgSendPreview" style="display:none">
+    <div class="img-send-preview-inner">
+      <img id="imgSendThumb" class="img-send-thumb">
+      <div class="img-send-meta">
+        <div id="imgSendName" class="img-send-filename"></div>
+        <div id="imgSendStats" class="img-send-stats"></div>
+        <div class="img-send-actions">
+          <button class="btn" onclick="encodeImageChain()">Generate QR Chain</button>
+          <button class="btn secondary" onclick="clearImgSend()">✕ Remove</button>
+        </div>
+        <div class="img-quality-row">
+          <label class="img-quality-label">Quality <span id="imgQualityVal">80</span>%</label>
+          <input type="range" id="imgQuality" min="10" max="100" value="80" step="5" oninput="updateImgPreview()">
+          <label class="img-quality-label">Max width <span id="imgMaxWVal">—</span>px</label>
+          <input type="range" id="imgMaxW" min="100" max="4000" value="1200" step="50" oninput="updateImgPreview()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <textarea id="textInput" placeholder="Paste any text here — it will be split across multiple QR codes automatically…" style="height:220px"></textarea>
+
+  <div class="controls-row">
+    <button class="btn" onclick="generateChain()">Generate Chain</button>
+    <button class="btn secondary" onclick="clearGen()">Clear</button>
+    <span class="compression-badge" id="compressionBadge">— saved</span>
+  </div>
+
+  <div id="qrSequence" style="display:none">
+    <div class="seq-header">
+      <span class="seq-title">QR Sequence</span>
+      <span class="seq-count" id="seqCount"></span>
+    </div>
+    <div class="page-nav" id="pageNav" style="display:none">
+      <button class="page-btn" id="pagePrev" onclick="changePage(-1)">← Prev</button>
+      <div class="page-stack" id="pageStack"></div>
+      <button class="page-btn" id="pageNext" onclick="changePage(1)">Next →</button>
+    </div>
+    <div class="qr-cards" id="qrCards"></div>
+    <div class="print-btn-row">
+      <button class="btn secondary" onclick="window.print()">🖨 Print all codes</button>
+    </div>
+  </div>
+</div>
+
+<div id="readPanel" class="panel">
+  <div class="read-layout">
+    <div class="read-controls">
+      <button class="btn" id="startCamBtn" onclick="startCamera()">Start Camera</button>
+      <button class="btn secondary" onclick="resetReader()">Reset Text</button>
+    </div>
+
+    <div class="scanner-box" id="scannerBox">
+      <div class="camera-start" id="cameraStart">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <p>Press "Start Camera" to begin scanning QR codes.<br>Allow camera access when prompted.</p>
+      </div>
+      <div id="reader" style="display:none"></div>
+      <div class="scanner-status" id="scanStatus" style="display:none">Align QR code in frame</div>
+    </div>
+
+    <!-- ── TIMELINE — sits right below camera, hidden until first chunk arrives ── -->
+    <div class="tl-wrap" id="tlWrap" style="display:none">
+      <div class="tl-topbar">
+        <span class="tl-title">QR Timeline</span>
+        <span class="tl-stats" id="tlStats"></span>
+        <span class="tl-missing-badge" id="tlMissBadge" style="display:none"></span>
+      </div>
+      <!-- The strip itself: one thin cell per frame, scrolls horizontally -->
+      <div class="tl-strip-wrap">
+        <div class="tl-strip" id="tlStrip"></div>
+      </div>
+      <!-- Jump hint shown when a missing frame is clicked -->
+      <div class="tl-hint" id="tlHint" style="display:none">
+        <span class="tl-hint-icon">↑</span>
+        <span id="tlHintText">Jump to frame … on the sender</span>
+        <button class="tl-hint-dismiss" onclick="document.getElementById('tlHint').style.display='none'">✕</button>
+      </div>
+    </div>
+
+    <div class="text-output-box">
+      <div class="text-output-header">
+        <span>Accumulated Text</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="copy-btn" onclick="copyText()" id="copyBtn">Copy</button>
+          <span class="progress-pill" id="progressPill">0 scanned</span>
+        </div>
+      </div>
+      <div id="accumulatedText">Scan QR codes in order — text will appear here…</div>
+      <div id="fileDownloadBox" class="file-download-box" style="display:none">
+        <div class="file-download-icon">🖼</div>
+        <div class="file-download-info">
+          <div class="file-download-name" id="fileDownloadName">image.png</div>
+          <div class="file-download-sub" id="fileDownloadSub"></div>
+        </div>
+        <button class="file-download-btn" onclick="downloadReceivedFile()">⬇ Download</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Text preview modal -->
+<div class="modal-backdrop" id="textModal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="modalTitle">Code 1 of 1</span>
+      <button class="modal-close" onclick="document.getElementById('textModal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Slideshow overlay -->
+<div id="slideshow" style="display:none" onclick="ssTapToStart()">
+  <div class="ss-top">
+    <div class="ss-top-left">
+      <span id="ssLabel">BROADCAST</span>
+      <span class="ss-loop-tag" id="ssLoopTag">LOOP 2</span>
+    </div>
+    <span id="ssFrameCounter" style="font-family:'DM Mono',monospace;font-size:12px;color:#666;letter-spacing:0.08em;"></span>
+    <button class="ss-close" onclick="closeSlideshow()">✕ Exit</button>
+  </div>
+
+  <div class="ss-main">
+    <div class="ss-qr-wrap">
+      <img id="ssQrImg" src="" alt="QR">
+    </div>
+    <div id="ssTapOverlay" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;">
+      <div style="font-family:'DM Mono',monospace;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.45);background:rgba(0,0,0,0.55);padding:12px 24px;border-radius:4px;border:1px solid rgba(255,255,255,0.15);">Tap anywhere to start</div>
+    </div>
+  </div>
+
+  <div class="ss-bottom" onclick="event.stopPropagation()">
+    <div class="ss-progress-track" onclick="handleProgressClick(event)" title="Click to jump">
+      <div class="ss-progress-bar" id="ssProgressBar"></div>
+    </div>
+    <div class="ss-controls-row">
+      <div class="ss-jump">
+        <button class="ss-jump-btn" onclick="jumpFirst()">⏮</button>
+        <button class="ss-jump-btn" onclick="jumpPrev()">◀</button>
+        <button class="ss-jump-btn" id="ssPlayPause" onclick="togglePlay()">⏸</button>
+        <button class="ss-jump-btn" onclick="jumpNext()">▶</button>
+        <button class="ss-jump-btn" onclick="jumpLast()">⏭</button>
+        <div class="ss-jump-input-wrap">
+          <input type="number" id="ssJumpInput" class="ss-jump-input" min="1" placeholder="…"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();jumpTo();}"
+                 oninput="this.value=this.value.replace(/[^0-9]/g,''); if(this.value.length>=2) jumpTo();"
+                 onclick="event.stopPropagation()">
+        </div>
+      </div>
+      <div class="ss-speed">
+        <button class="ss-spd-btn" onclick="adjustSpeed(-200)">−</button>
+        <span id="ssSpdLabel">0.16s</span>
+        <button class="ss-spd-btn" onclick="adjustSpeed(200)">+</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings drawer -->
+<div id="settingsBackdrop" onclick="closeSettings()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;"></div>
+<div id="settingsDrawer">
+  <div class="drw-header">
+    <span>Settings</span>
+    <button class="drw-close" onclick="closeSettings()">✕</button>
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Presets</div>
+    <div class="drw-presets" id="presetList">
+      <button class="preset-btn" onclick="applyPreset(250, 200)">
+        <span class="preset-name">Balanced</span>
+        <span class="preset-sub">0.2s · 250 chars</span>
+      </button>
+    </div>
+    <div class="drw-add-preset" id="addPresetForm" style="display:none">
+      <input type="text" id="newPresetName" class="drw-preset-name-input" placeholder="Preset name…" maxlength="24">
+      <div class="drw-add-preset-row">
+        <button class="btn" style="flex:1" onclick="saveCustomPreset()">Save</button>
+        <button class="btn secondary" onclick="cancelAddPreset()">Cancel</button>
+      </div>
+    </div>
+    <button class="drw-add-btn" id="addPresetBtn" onclick="showAddPreset()">+ Save current as preset</button>
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Chunk Size — <span id="drwChunkVal">500</span> chars <span style="font-size:10px;color:#aaa">(max 500, dense above 300)</span></div>
+    <input type="range" id="drwChunk" min="40" max="500" value="500" step="10" oninput="syncChunk(this.value)">
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Broadcast Speed (seconds per code)</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="number" id="drwSpeed" class="drw-speed-input" min="0.05" max="10" step="0.01" value="0.16"
+             oninput="syncSpeedInput(this.value)" onblur="clampSpeedInput()">
+      <span style="font-family:'DM Mono',monospace;font-size:12px;color:#888">s</span>
+    </div>
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Compression</div>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" id="useDeflate" checked style="accent-color:var(--accent);width:16px;height:16px">
+      <span style="font-family:'DM Mono',monospace;font-size:12px">Deflate compress text (pako)</span>
+    </label>
+    <p class="drw-hint">Compresses text ~40–70% before chunking. Automatically disabled for short inputs where it wouldn't help.</p>
+  </div>
+  <div class="drw-section">
+    <button class="btn" style="width:100%" onclick="saveDefaults()">Save as Default</button>
+    <p class="drw-hint">Saved defaults load automatically on next visit.</p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  PAKO (deflate) — lazy-loaded on first use
+// ═══════════════════════════════════════════════════════════
+let pakoLib = null;
+
+async function ensurePako() {
+  if (pakoLib) return pakoLib;
+  // Import pako ESM from CDN
+  const mod = await import('https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.esm.mjs');
+  pakoLib = mod.default || mod;
+  return pakoLib;
+}
+
+// base64url (no padding, URL-safe) — fits QR byte mode cleanly
+function toB64url(uint8arr) {
+  let bin = '';
+  for (let i = 0; i < uint8arr.length; i++) bin += String.fromCharCode(uint8arr[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromB64url(str) {
+  const padded = str.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(padded);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+async function compressText(text) {
+  const pako = await ensurePako();
+  const bytes = new TextEncoder().encode(text);
+  const compressed = pako.deflate(bytes, { level: 9 });
+  return toB64url(compressed);
+}
+
+async function decompressText(b64url) {
+  const pako = await ensurePako();
+  const compressed = fromB64url(b64url);
+  const bytes = pako.inflate(compressed);
+  return new TextDecoder().decode(bytes);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((b, i) =>
+    b.classList.toggle('active', (i === 0 && t === 'generate') || (i === 1 && t === 'read'))
+  );
+  document.getElementById('generatePanel').classList.toggle('active', t === 'generate');
+  document.getElementById('readPanel').classList.toggle('active', t === 'read');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LOCALSTORAGE
+// ═══════════════════════════════════════════════════════════
+const textInput = document.getElementById('textInput');
+const STORAGE_KEY = 'qrchain-text';
+
+try {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) textInput.value = saved;
+} catch(e) {}
+
+textInput.addEventListener('input', () => {
+  try { localStorage.setItem(STORAGE_KEY, textInput.value); } catch(e) {}
+});
+
+// ═══════════════════════════════════════════════════════════
+//  OPT 4: WHITESPACE COLLAPSE
+// ═══════════════════════════════════════════════════════════
+function collapseWhitespace(text) {
+  return text
+    .replace(/[ \t]+/g, ' ')       // collapse horizontal whitespace
+    .replace(/\n{3,}/g, '\n\n')    // max 2 consecutive newlines
+    .replace(/[ \t]+\n/g, '\n')    // strip trailing spaces on lines
+    .trim();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  OPT 14: CHUNK WITH TRIMMED BOUNDARIES
+// ═══════════════════════════════════════════════════════════
+function chunkText(text, size) {
+  const chunks = [];
+  let i = 0;
+  while (i < text.length) {
+    let end = i + size;
+    if (end < text.length) {
+      // Break at last space within the window
+      const spaceBack = text.lastIndexOf(' ', end);
+      if (spaceBack > i) end = spaceBack; // point AT the space, not past it
+    }
+    chunks.push(text.slice(i, end).trim()); // OPT 14: trim both sides
+    // Skip the boundary space so reader doesn't need to join with space
+    i = (end < text.length && text[end] === ' ') ? end + 1 : end;
+  }
+  return chunks.filter(Boolean);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  OPT 8: ENCODE — total only in chunk 1
+// ═══════════════════════════════════════════════════════════
+function encodeChunk(index, total, payload, compressed) {
+  // Format:
+  //   Chunk 1:  QRC|1/47[Z]|<data>   (Z suffix = deflate compressed)
+  //   Chunk N:  QRC|N|<data>          (total omitted — reader already has it)
+  const compFlag = compressed ? 'Z' : '';
+  if (index === 1) return `QRC|${index}/${total}${compFlag}|${payload}`;
+  return `QRC|${index}|${payload}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GENERATE
+// ═══════════════════════════════════════════════════════════
+const PAGE_SIZE = 50;
+let allChunks  = [];
+let currentPage = 0;
+
+async function generateChain() {
+  const raw = document.getElementById('textInput').value.trim();
+  if (!raw) { showToast('Paste some text first'); return; }
+
+  const size = parseInt(document.getElementById('drwChunk').value) || 500;
+  const useDeflate = document.getElementById('useDeflate').checked;
+  const badge = document.getElementById('compressionBadge');
+
+  // OPT 4: collapse whitespace first
+  const collapsed = collapseWhitespace(raw);
+  const collapsedLen = collapsed.length;
+
+  // OPT 3: try deflate if enabled, text is long enough, and it's NOT image/binary data.
+  // JPEG base64 is already compressed — deflating it typically makes it LARGER.
+  // Heuristic: if >60% of chars are base64 alphabet and text is very long, skip deflate.
+  let textToChunk = collapsed;
+  let compressed  = false;
+
+  const looksLikeBinaryB64 = collapsed.length > 500 &&
+    (collapsed.match(/[A-Za-z0-9+/=]{200,}/g) || []).join('').length > collapsed.length * 0.6;
+
+  if (useDeflate && !looksLikeBinaryB64 && collapsed.length > 200) {
+    try {
+      const deflated = await compressText(collapsed);
+      // Only use if it actually saves space (short texts can expand)
+      if (deflated.length < collapsed.length * 0.95) {
+        textToChunk = deflated;
+        compressed = true;
+      }
+    } catch(e) {
+      console.warn('Deflate failed, falling back to plain text:', e);
+    }
+  }
+
+  // OPT 14: chunk with boundary trimming
+  const chunks = chunkText(textToChunk, size);
+  const total  = chunks.length;
+
+  // Build payloads (OPT 8: total only in first chunk)
+  allChunks = chunks.map((chunk, idx) =>
+    encodeChunk(idx + 1, total, chunk, compressed && idx === 0)
+  );
+
+  currentPage = 0;
+  ssChunks    = allChunks;
+
+  // Show compression badge
+  const origCodes  = Math.ceil(collapsedLen / size);
+  const savedCodes = origCodes - total;
+  const savedPct   = Math.round((1 - total / origCodes) * 100);
+
+  if (compressed && savedCodes > 0) {
+    badge.textContent = `↓${savedPct}% — ${savedCodes} fewer code${savedCodes > 1 ? 's' : ''}`;
+    badge.classList.add('visible');
+  } else if (collapsedLen < raw.length) {
+    const charsSaved = raw.length - collapsedLen;
+    badge.textContent = `↓${charsSaved} chars (whitespace)`;
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
+
+  document.getElementById('seqCount').textContent = `${total} code${total > 1 ? 's' : ''}`;
+  document.getElementById('qrSequence').style.display = 'block';
+  document.getElementById('broadcastBtn').style.display = 'flex';
+
+  renderPage(0);
+  showToast(`${total} QR codes generated`, true);
+}
+
+function renderPage(page) {
+  currentPage = page;
+  const total      = allChunks.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const start      = page * PAGE_SIZE;
+  const end        = Math.min(start + PAGE_SIZE, total);
+  const container  = document.getElementById('qrCards');
+  container.innerHTML = '';
+
+  const pageNav = document.getElementById('pageNav');
+  pageNav.style.display = totalPages > 1 ? 'flex' : 'none';
+
+  if (totalPages > 1) {
+    const stack = document.getElementById('pageStack');
+    stack.innerHTML = '';
+    for (let p = 0; p < totalPages; p++) {
+      const wrap = document.createElement('div');
+      wrap.className = 'page-pip-wrap';
+      wrap.onclick = () => renderPage(p);
+      const pip = document.createElement('div');
+      pip.className = 'page-pip' + (p === page ? ' active' : '');
+      pip.textContent = p + 1;
+      const lbl = document.createElement('div');
+      lbl.className = 'page-pip-label';
+      lbl.textContent = `${p * PAGE_SIZE + 1}–${Math.min((p + 1) * PAGE_SIZE, total)}`;
+      wrap.appendChild(pip);
+      wrap.appendChild(lbl);
+      stack.appendChild(wrap);
+    }
+    document.getElementById('pagePrev').disabled = page === 0;
+    document.getElementById('pageNext').disabled = page === totalPages - 1;
+  }
+
+  for (let idx = start; idx < end; idx++) {
+    const payload = allChunks[idx]; // already fully encoded
+    const card    = document.createElement('div');
+    card.className = 'qr-card';
+    card.style.animationDelay = ((idx - start) * 20) + 'ms';
+
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
+
+    // Preview shows human-readable portion (strip protocol prefix)
+    const previewText = payload.split('|').slice(2).join('|');
+
+    card.innerHTML = `
+      <div class="qr-card-header">
+        <span>Code ${idx+1} of ${total}</span>
+        ${idx === total-1 ? '<span>LAST</span>' : ''}
+      </div>
+      <img src="${qrUrl}" alt="QR ${idx+1}" loading="lazy">
+      <div class="qr-card-preview">${previewText.slice(0,60)}${previewText.length > 60 ? '…' : ''}</div>
+    `;
+    card.addEventListener('click', () => openModal(idx+1, total, previewText));
+    container.appendChild(card);
+  }
+}
+
+function changePage(dir) {
+  const totalPages = Math.ceil(allChunks.length / PAGE_SIZE);
+  const next = currentPage + dir;
+  if (next >= 0 && next < totalPages) {
+    renderPage(next);
+    document.getElementById('qrSequence').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function clearGen() {
+  document.getElementById('textInput').value = '';
+  document.getElementById('qrSequence').style.display = 'none';
+  document.getElementById('qrCards').innerHTML = '';
+  document.getElementById('broadcastBtn').style.display = 'none';
+  document.getElementById('compressionBadge').classList.remove('visible');
+  allChunks = []; ssChunks = []; currentPage = 0;
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  READ / SCAN
+// ═══════════════════════════════════════════════════════════
+let cameraStarted = false;
+let qrScanner     = null;
+let scannedChunks = {};
+let totalChunks   = null;
+let lastScanned   = null;
+let isCompressed  = false; // set when chunk 1 is received with Z flag
+
+async function startCamera() {
+  const readerEl = document.getElementById('reader');
+  readerEl.style.display = 'block';
+  document.getElementById('cameraStart').style.display = 'none';
+  document.getElementById('scanStatus').style.display = 'block';
+  document.getElementById('startCamBtn').textContent = 'Camera On';
+  document.getElementById('startCamBtn').disabled = true;
+  cameraStarted = true;
+
+  try {
+    const { default: QrScanner } = await import('https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js');
+    const video = document.createElement('video');
+    readerEl.appendChild(video);
+
+    qrScanner = new QrScanner(
+      video,
+      result => processQR(result.data),
+      {
+        preferredCamera: 'environment',
+        highlightScanRegion: true,
+        highlightCodeOutline: true,
+        returnDetailedScanResult: true,
+      }
+    );
+
+    await qrScanner.start();
+    setStatus('Camera running — point at a QR code');
+  } catch(e) {
+    showToast('Camera access denied');
+    console.error(e);
+    document.getElementById('startCamBtn').disabled = false;
+    document.getElementById('startCamBtn').textContent = 'Camera On';
+    cameraStarted = false;
+    document.getElementById('cameraStart').style.display = 'flex';
+    document.getElementById('reader').style.display = 'none';
+  }
+}
+
+async function processQR(data) {
+  if (data.startsWith('QRF|')) { processFileQR(data); return; }
+  if (!data.startsWith('QRC|')) return;
+
+  const parts = data.split('|');
+  if (parts.length < 3) return;
+
+  const meta      = parts[1];
+  const payload   = parts.slice(2).join('|');
+
+  // ── OPT 8: parse meta ──
+  // Chunk 1 meta: "1/47" or "1/47Z"  (Z = compressed)
+  // Chunk N meta: "N"                 (no total — infer from chunk 1)
+  let idx, total, compressedFlag = false;
+
+  if (meta.includes('/')) {
+    // First-style: index/total[Z]
+    const metaClean = meta.replace(/Z$/, '');
+    compressedFlag = meta.endsWith('Z');
+    const [idxStr, totStr] = metaClean.split('/');
+    idx   = parseInt(idxStr);
+    total = parseInt(totStr);
+    if (idx === 1) {
+      totalChunks  = total;
+      isCompressed = compressedFlag;
+    }
+  } else {
+    // Subsequent chunk: just the index
+    idx   = parseInt(meta);
+    total = totalChunks; // already set from chunk 1
+  }
+
+  if (isNaN(idx) || !total) return;
+  if (scannedChunks[idx]) {
+    if (lastScanned !== idx) {
+      lastScanned = idx;
+      setStatus(`Code ${idx}/${total} already scanned`);
+    }
+    return;
+  }
+
+  lastScanned = idx;
+  scannedChunks[idx] = payload;
+
+  await updateTextDisplay();
+  updateTimeline(total);
+
+  // Throttle toast during rapid scanning — show at most every 600ms
+  const now = Date.now();
+  if (!processQR._lastToast || now - processQR._lastToast > 600) {
+    showToast(`Code ${idx}/${total} scanned`, true);
+    processQR._lastToast = now;
+  }
+  setStatus(`✓ Got code ${idx}/${total}. ${Object.keys(scannedChunks).length < total ? 'Scan next…' : 'Complete!'}`);
+
+  if (Object.keys(scannedChunks).length === total) {
+    showToast(`All ${total} codes scanned ✓`, true);
+    setStatus('✓ All codes scanned — text complete!');
+  }
+}
+
+async function updateTextDisplay() {
+  const box  = document.getElementById('accumulatedText');
+  const keys = Object.keys(scannedChunks).map(Number).sort((a, b) => a - b);
+
+  // Image chains store `true` as the value (actual data is in fileChunks).
+  // Don't try to assemble/display them as text.
+  if (keys.length > 0 && scannedChunks[keys[0]] === true) {
+    box.textContent = `Receiving image… ${keys.length}/${totalChunks || '?'} chunks scanned`;
+    const scanned = keys.length;
+    const pill = document.getElementById('progressPill');
+    pill.textContent = totalChunks ? `${scanned}/${totalChunks}` : `${scanned} scanned`;
+    pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
+    return;
+  }
+
+  // Rejoin chunks — OPT 14 means chunks are pre-trimmed, join with space
+  const reassembled = keys.map(k => scannedChunks[k]).join(' ');
+
+  let finalText = reassembled;
+
+  // OPT 3: decompress if the chain was compressed
+  if (isCompressed && totalChunks && keys.length === totalChunks) {
+    try {
+      finalText = await decompressText(reassembled.replace(/ /g, ''));
+    } catch(e) {
+      console.warn('Decompress failed:', e);
+    }
+  }
+
+  box.textContent = finalText;
+  box.classList.remove('flash-new');
+  void box.offsetWidth;
+  box.classList.add('flash-new');
+
+  const scanned = keys.length;
+  const pill = document.getElementById('progressPill');
+  pill.textContent = totalChunks ? `${scanned}/${totalChunks} scanned` : `${scanned} scanned`;
+  pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
+}
+
+// ── SCAN TIMELINE ──
+// Renders a horizontal film-strip of cells, one per frame.
+// Grey = not yet received (but total unknown → don't mark red yet)
+// Green = scanned
+// Red/pulsing = confirmed missing (total IS known, frame not received, and
+//               frames after it have been received OR we're past it)
+let lastKnownTotal = 0;
+
+function updateTimeline(total) {
+  if (!total) return;
+  lastKnownTotal = total;
+
+  const wrap  = document.getElementById('tlWrap');
+  const strip = document.getElementById('tlStrip');
+  const stats = document.getElementById('tlStats');
+  const badge = document.getElementById('tlMissBadge');
+
+  wrap.style.display = 'block';
+
+  const got     = Object.keys(scannedChunks).length;
+  const missing = total - got;
+
+  stats.textContent = `${got} / ${total}`;
+  badge.style.display = missing > 0 ? 'inline' : 'none';
+  if (missing > 0) badge.textContent = `${missing} missing`;
+
+  const receivedIdxs = Object.keys(scannedChunks).map(Number);
+  const frontier = receivedIdxs.length ? Math.max(...receivedIdxs) : 0;
+
+  const existingCells = strip.children.length;
+
+  // Add any new cells (for growing total or first render)
+  for (let i = existingCells + 1; i <= total; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'tl-cell';
+    cell.dataset.frame = i;
+
+    const num = document.createElement('div');
+    num.className = 'tl-cell-num';
+    num.textContent = i;
+
+    const bar = document.createElement('div');
+    bar.className = 'tl-cell-bar';
+
+    cell.appendChild(num);
+    cell.appendChild(bar);
+    strip.appendChild(cell);
+  }
+
+  // Update state of all cells without rebuilding DOM
+  for (let i = 1; i <= total; i++) {
+    const cell     = strip.children[i - 1];
+    const isGot    = !!scannedChunks[i];
+    const isMiss   = !isGot && i < frontier;
+    const isCurrent = isGot && i === frontier;
+
+    const newClass = 'tl-cell' + (isGot ? ' got' : isMiss ? ' miss' : '') + (isCurrent ? ' current' : '');
+    if (cell.className !== newClass) cell.className = newClass;
+
+    // Only re-bind onclick if state changed (avoid repeated listener accumulation)
+    const prevState = cell.dataset.state || '';
+    const newState  = isGot ? 'got' : isMiss ? 'miss' : 'pending';
+    if (prevState !== newState) {
+      cell.dataset.state = newState;
+      cell.onclick = isMiss ? () => showMissingHint(i, total, frontier)
+                   : isGot  ? () => showToast(`Frame ${i} scanned ✓`, true)
+                             : () => showToast(`Frame ${i} not yet reached`, false);
+      cell.title = isMiss ? `Frame ${i} missing`
+                 : isGot  ? `Frame ${i} ✓`
+                           : `Frame ${i} — not yet scanned`;
+    }
+  }
+
+  // Auto-scroll to current position
+  if (frontier > 0) {
+    const cellW = 31;
+    const stripWrap = document.querySelector('.tl-strip-wrap');
+    if (stripWrap) stripWrap.scrollLeft = Math.max(0, (frontier - 3) * cellW);
+  }
+}
+
+function showMissingHint(n, total, frontier) {
+  // Find the full missing range around n
+  let rangeStart = n, rangeEnd = n;
+  while (rangeStart > 1 && !scannedChunks[rangeStart - 1]) rangeStart--;
+  while (rangeEnd < frontier - 1 && !scannedChunks[rangeEnd + 1]) rangeEnd++;
+
+  const hint    = document.getElementById('tlHint');
+  const hintTxt = document.getElementById('tlHintText');
+
+  let msg;
+  if (rangeStart === rangeEnd) {
+    msg = `Jump to frame ${n} on the sender screen`;
+  } else {
+    msg = `Jump to frame ${rangeStart} — missing ${rangeStart}–${rangeEnd} (${rangeEnd - rangeStart + 1} frames)`;
+  }
+  hintTxt.textContent = msg;
+  hint.style.display = 'flex';
+
+  // Pre-fill the slideshow jump input if it's accessible
+  const jumpInput = document.getElementById('ssJumpInput');
+  if (jumpInput) jumpInput.value = rangeStart;
+
+  showToast(`Missing: frame${rangeStart === rangeEnd ? '' : 's'} ${rangeStart}${rangeStart !== rangeEnd ? '–' + rangeEnd : ''}`, false);
+}
+
+function setStatus(msg) {
+  document.getElementById('scanStatus').textContent = msg;
+}
+
+function resetReader() {
+  scannedChunks = {}; fileChunks = {}; recvB64Full = '';
+  totalChunks   = null;
+  lastScanned   = null;
+  isCompressed  = false;
+  document.getElementById('fileDownloadBox').style.display = 'none';
+  const box = document.getElementById('accumulatedText');
+  box.textContent = 'Scan QR codes in order — text will appear here…';
+  document.getElementById('progressPill').textContent = '0 scanned';
+  document.getElementById('progressPill').className = 'progress-pill';
+  document.getElementById('tlWrap').style.display = 'none';
+  document.getElementById('tlStrip').innerHTML = '';
+  document.getElementById('tlHint').style.display = 'none';
+  lastKnownTotal = 0;
+  setStatus('Align QR code in frame');
+  showToast('Reader reset');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SLIDESHOW
+// ═══════════════════════════════════════════════════════════
+let ssChunks   = [];
+let ssInterval = null;
+let ssCurrent  = -1;
+let ssSpeed    = 500;
+let ssLoopCount = 0;
+
+const CAL_PAYLOAD = encodeURIComponent('QRCAL|Calibration — point camera here and hold steady');
+
+function openSlideshow() {
+  if (!ssChunks.length) { showToast('Generate a chain first'); return; }
+  document.getElementById('slideshow').style.display = 'flex';
+  ssCurrent   = -1;
+  ssLoopCount = 0;
+  clearInterval(ssInterval);
+  ssInterval = null;
+  showSlide(-1);
+  // Show tap-to-start overlay
+  const overlay = document.getElementById('ssTapOverlay');
+  if (overlay) overlay.style.display = 'flex';
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '▶'; btn.style.background = 'rgba(39,174,96,0.35)'; }
+}
+
+function ssTapToStart() {
+  const overlay = document.getElementById('ssTapOverlay');
+  if (!overlay || overlay.style.display === 'none') return; // already started
+  overlay.style.display = 'none';
+  ssCurrent = 0;
+  showSlide(0);
+  ssInterval = setInterval(advanceSlide, ssSpeed);
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '⏸'; btn.style.background = ''; }
+}
+
+function closeSlideshow() {
+  clearInterval(ssInterval);
+  ssInterval = null;
+  document.getElementById('slideshow').style.display = 'none';
+}
+
+function advanceSlide() {
+  ssCurrent++;
+  if (ssCurrent >= ssChunks.length) { ssCurrent = 0; ssLoopCount++; }
+  showSlide(ssCurrent);
+  // Prefetch the next frame so it's in browser cache when needed
+  prefetchSlide(ssCurrent + 1);
+}
+
+function prefetchSlide(idx) {
+  if (idx < 0 || idx >= ssChunks.length) return;
+  const payload = ssChunks[idx];
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
+  const img = new Image();
+  img.src = url; // browser caches it, we discard the element
+}
+
+function showSlide(idx) {
+  const img       = document.getElementById('ssQrImg');
+  const label     = document.getElementById('ssLabel');
+  const loopTag   = document.getElementById('ssLoopTag');
+  const counter   = document.getElementById('ssFrameCounter');
+  const bar       = document.getElementById('ssProgressBar');
+  const total     = ssChunks.length;
+
+  if (idx === -1) {
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${CAL_PAYLOAD}`;
+    label.textContent = 'CALIBRATION';
+    label.style.color = '#f39c12';
+    loopTag.classList.remove('visible');
+    if (counter) counter.textContent = '';
+    bar.style.width = '0%';
+    bar.style.transitionDuration = '0ms';
+    bar.className = 'ss-progress-bar calibration';
+  } else {
+    const payload = allChunks[idx];
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
+
+    label.textContent = 'BROADCAST';
+    label.style.color = '#555';
+
+    if (counter) counter.textContent = `${idx + 1} / ${total}`;
+
+    if (ssLoopCount > 0) {
+      loopTag.textContent = `LOOP ${ssLoopCount + 1}`;
+      loopTag.classList.add('visible');
+    } else {
+      loopTag.classList.remove('visible');
+    }
+
+    bar.style.transitionDuration = '0ms';
+    bar.style.width = ((idx / total) * 100) + '%';
+    bar.className = 'ss-progress-bar';
+    requestAnimationFrame(() => {
+      bar.style.transitionDuration = ssSpeed + 'ms';
+      bar.style.width = (((idx + 1) / total) * 100) + '%';
+    });
+  }
+}
+
+function jumpTo() {
+  const input = document.getElementById('ssJumpInput');
+  const n = parseInt(input.value);
+  if (!n || n < 1 || n > ssChunks.length) return;
+  // Dismiss tap overlay if still showing
+  const overlay = document.getElementById('ssTapOverlay');
+  if (overlay) overlay.style.display = 'none';
+  // Keep playing if already playing, just jump
+  const wasPlaying = !!ssInterval;
+  if (!wasPlaying) clearSsInterval();
+  ssCurrent = n - 1;
+  showSlide(ssCurrent);
+  if (!wasPlaying) {
+    // Start playing after manual jump
+    ssInterval = setInterval(advanceSlide, ssSpeed);
+    const btn = document.getElementById('ssPlayPause');
+    if (btn) { btn.textContent = '⏸'; btn.style.background = ''; }
+  }
+}
+
+function jumpPrev()  { ssCurrent = Math.max(0, ssCurrent - 1); showSlide(ssCurrent); }
+function jumpNext()  { ssCurrent = Math.min(ssChunks.length - 1, ssCurrent + 1); showSlide(ssCurrent); }
+function jumpFirst() { ssCurrent = 0; showSlide(0); }
+function jumpLast()  { ssCurrent = ssChunks.length - 1; showSlide(ssCurrent); }
+
+function handleProgressClick(e) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const frac = (e.clientX - rect.left) / rect.width;
+  const idx  = Math.floor(frac * ssChunks.length);
+  clearSsInterval();
+  ssCurrent = Math.max(0, Math.min(ssChunks.length - 1, idx));
+  showSlide(ssCurrent);
+}
+
+function togglePlay() {
+  // Dismiss tap overlay if still showing
+  const overlay = document.getElementById('ssTapOverlay');
+  if (overlay) overlay.style.display = 'none';
+  const btn = document.getElementById('ssPlayPause');
+  if (ssInterval) {
+    clearInterval(ssInterval); ssInterval = null;
+    if (btn) { btn.textContent = '▶'; btn.style.background = 'rgba(39,174,96,0.35)'; }
+  } else {
+    // If we haven't started yet (still on cal slide), jump to frame 1 first
+    if (ssCurrent === -1) { ssCurrent = 0; showSlide(0); }
+    ssInterval = setInterval(advanceSlide, ssSpeed);
+    if (btn) { btn.textContent = '⏸'; btn.style.background = ''; }
+  }
+}
+
+function clearSsInterval() {
+  clearInterval(ssInterval); ssInterval = null;
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '▶'; btn.style.background = 'rgba(39,174,96,0.35)'; }
+}
+
+function adjustSpeed(delta) {
+  ssSpeed = Math.min(10000, Math.max(50, ssSpeed + delta));
+  const secs = ssSpeed / 1000;
+  const lbl = secs < 1
+    ? secs.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + 's'
+    : secs.toFixed(2).replace(/\.?0+$/, '') + 's';
+  document.getElementById('ssSpdLabel').textContent = lbl;
+  document.getElementById('drwSpeed').value = secs;
+  if (ssInterval) { clearInterval(ssInterval); ssInterval = setInterval(advanceSlide, ssSpeed); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MODAL
+// ═══════════════════════════════════════════════════════════
+function openModal(idx, total, text) {
+  document.getElementById('modalTitle').textContent = `Code ${idx} of ${total}`;
+  document.getElementById('modalBody').textContent = text;
+  document.getElementById('textModal').classList.add('open');
+}
+function closeModal(e) {
+  if (e.target === document.getElementById('textModal'))
+    document.getElementById('textModal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CUSTOM PRESETS
+// ═══════════════════════════════════════════════════════════
+const CUSTOM_PRESETS_KEY = 'qrchain-custom-presets';
+
+function loadCustomPresets() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_PRESETS_KEY) || '[]');
+    saved.forEach(p => addPresetButton(p.name, p.chunk, p.speed));
+  } catch(e) {}
+}
+
+function addPresetButton(name, chunk, speed) {
+  const list = document.getElementById('presetList');
+  const btn  = document.createElement('button');
+  btn.className = 'preset-btn preset-btn-custom';
+  btn.innerHTML = `<span class="preset-name">${name}</span><span class="preset-sub">${(speed/1000).toFixed(2).replace(/\.?0+$/,'')}s · ${chunk} chars</span>`;
+  btn.onclick = () => applyPreset(chunk, speed);
+  const del = document.createElement('button');
+  del.className = 'preset-btn-delete';
+  del.textContent = '✕';
+  del.title = 'Delete preset';
+  del.onclick = (e) => { e.stopPropagation(); deleteCustomPreset(name); btn.remove(); };
+  btn.appendChild(del);
+  list.appendChild(btn);
+}
+
+function showAddPreset()   { document.getElementById('addPresetForm').style.display = 'flex'; document.getElementById('addPresetBtn').style.display = 'none'; setTimeout(() => document.getElementById('newPresetName').focus(), 50); }
+function cancelAddPreset() { document.getElementById('addPresetForm').style.display = 'none'; document.getElementById('addPresetBtn').style.display = 'block'; document.getElementById('newPresetName').value = ''; }
+
+function saveCustomPreset() {
+  const name = document.getElementById('newPresetName').value.trim();
+  if (!name) { showToast('Enter a name'); return; }
+  const chunk = parseInt(document.getElementById('drwChunk').value);
+  const speed = Math.round(parseFloat(document.getElementById('drwSpeed').value) * 1000);
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_PRESETS_KEY) || '[]');
+    if (saved.find(p => p.name === name)) { showToast('Name already used'); return; }
+    saved.push({ name, chunk, speed });
+    localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(saved));
+  } catch(e) {}
+  addPresetButton(name, chunk, speed);
+  cancelAddPreset();
+  showToast(`"${name}" saved`, true);
+}
+
+function deleteCustomPreset(name) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_PRESETS_KEY) || '[]');
+    localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(saved.filter(p => p.name !== name)));
+  } catch(e) {}
+  showToast('Preset deleted');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SETTINGS DRAWER
+// ═══════════════════════════════════════════════════════════
+const SETTINGS_KEY = 'qrchain-settings';
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const chunk = s.chunk || 500;
+    const speed = s.speed || 160;
+    const deflate = s.deflate !== false; // default true
+    applyPreset(chunk, speed, true);
+    document.getElementById('drwSpeed').value = speed / 1000;
+    document.getElementById('useDeflate').checked = deflate;
+  } catch(e) {}
+}
+
+function applyPreset(chunk, speed, silent) {
+  document.getElementById('drwChunk').value = chunk;
+  document.getElementById('drwChunkVal').textContent = chunk;
+  ssSpeed = speed;
+  const speedSecs = speed / 1000;
+  document.getElementById('drwSpeed').value = speedSecs;
+  const lbl = speedSecs < 1
+    ? speedSecs.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + 's'
+    : speedSecs.toFixed(2).replace(/\.?0+$/, '') + 's';
+  document.getElementById('ssSpdLabel').textContent = lbl;
+  if (!silent) { showToast('Preset applied', true); closeSettings(); }
+}
+
+function syncChunk(val) { document.getElementById('drwChunkVal').textContent = val; }
+
+function syncSpeedInput(val) {
+  const secs = parseFloat(val);
+  if (isNaN(secs) || secs <= 0) return;
+  ssSpeed = Math.round(secs * 1000);
+  const label = secs < 1
+    ? secs.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + 's'
+    : secs.toFixed(2).replace(/\.?0+$/, '') + 's';
+  document.getElementById('ssSpdLabel').textContent = label;
+  if (ssInterval) { clearInterval(ssInterval); ssInterval = setInterval(advanceSlide, ssSpeed); }
+}
+
+function clampSpeedInput() {
+  const input = document.getElementById('drwSpeed');
+  let secs = parseFloat(input.value);
+  if (isNaN(secs) || secs < 0.05) secs = 0.05;
+  if (secs > 10) secs = 10;
+  input.value = secs;
+  syncSpeedInput(secs);
+}
+
+function saveDefaults() {
+  const chunk   = parseInt(document.getElementById('drwChunk').value);
+  const speed   = Math.round(parseFloat(document.getElementById('drwSpeed').value) * 1000);
+  const deflate = document.getElementById('useDeflate').checked;
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ chunk, speed, deflate }));
+    showToast('Defaults saved', true);
+    closeSettings();
+  } catch(e) { showToast('Save failed'); }
+}
+
+function openSettings()  { document.getElementById('settingsDrawer').classList.add('open'); document.getElementById('settingsBackdrop').style.display = 'block'; }
+function closeSettings() { document.getElementById('settingsDrawer').classList.remove('open'); document.getElementById('settingsBackdrop').style.display = 'none'; }
+
+loadSettings();
+loadCustomPresets();
+
+// ═══════════════════════════════════════════════════════════
+//  COPY TEXT
+// ═══════════════════════════════════════════════════════════
+function copyText() {
+  const text = document.getElementById('accumulatedText').textContent;
+  if (!text || text.startsWith('Scan QR')) { showToast('Nothing to copy yet'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => showToast('Copy failed'));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PDF IMPORT
+// ═══════════════════════════════════════════════════════════
+let pdfJsLoaded = false;
+let loadedPdfFile = null;
+
+function showPdfActions(name) {
+  document.getElementById('pdfFileName').textContent = name;
+  document.getElementById('pdfActions').style.display = 'flex';
+}
+
+function reloadPdf() { if (!loadedPdfFile) { showToast('No PDF loaded'); return; } loadPdf(loadedPdfFile); }
+function removePdf() {
+  loadedPdfFile = null;
+  document.getElementById('pdfActions').style.display = 'none';
+  document.getElementById('textInput').value = '';
+  const dz = document.getElementById('pdfDropZone');
+  dz.querySelector('.pdf-drop-label').textContent = 'Parse PDF or Image → Text';
+  dz.querySelector('.pdf-drop-sub').textContent = 'Extracts readable text via PDF parsing or OCR';
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  showToast('PDF removed');
+}
+
+async function ensurePdfJs() {
+  if (pdfJsLoaded) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfJsLoaded = true;
+}
+
+function handleDragOver(e)  { e.preventDefault(); document.getElementById('pdfDropZone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('pdfDropZone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('pdfDropZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  if (file.type === 'application/pdf') loadPdf(file);
+  else if (file.type.startsWith('image/')) loadImage(file);
+  else showToast('Drop a PDF or image file');
+}
+function handleFileSelect(e) { const f = e.target.files[0]; if (f) loadPdf(f); e.target.value = ''; }
+function handleImgSelect(e)  { const f = e.target.files[0]; if (f) loadImage(f); e.target.value = ''; }
+
+async function loadPdf(file) {
+  loadedPdfFile = file;
+  const progress = document.getElementById('pdfProgress');
+  const fill     = document.getElementById('pdfProgressFill');
+  const label    = document.getElementById('pdfProgressLabel');
+  const dropZone = document.getElementById('pdfDropZone');
+
+  dropZone.style.display = 'none';
+  progress.style.display = 'block';
+  fill.style.width = '5%';
+  label.textContent = 'Loading PDF.js…';
+
+  try {
+    await ensurePdfJs();
+    label.textContent = 'Reading file…';
+    fill.style.width  = '15%';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    let fullText = '';
+
+    for (let i = 1; i <= numPages; i++) {
+      label.textContent = `Extracting page ${i} of ${numPages}…`;
+      fill.style.width  = (15 + (i / numPages) * 80) + '%';
+      const page    = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      fullText += content.items.map(item => item.str).join(' ') + '\n';
+    }
+
+    fill.style.width  = '100%';
+    label.textContent = `Done — ${fullText.trim().length.toLocaleString()} characters extracted`;
+    document.getElementById('textInput').value = fullText.trim();
+    try { localStorage.setItem(STORAGE_KEY, fullText.trim()); } catch(e) {}
+    showToast(`PDF loaded: ${numPages} page${numPages > 1 ? 's' : ''}, ${fullText.trim().length.toLocaleString()} chars`, true);
+
+    setTimeout(() => {
+      progress.style.display = 'none';
+      dropZone.style.display = 'block';
+      dropZone.querySelector('.pdf-drop-label').textContent = '✓ ' + file.name;
+      showPdfActions(file.name);
+      dropZone.querySelector('.pdf-drop-sub').textContent = 'Click or drop another PDF to replace';
+    }, 1400);
+  } catch(err) {
+    console.error(err);
+    showToast('Failed to read PDF: ' + err.message);
+    progress.style.display = 'none';
+    dropZone.style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  IMAGE OCR (Tesseract.js)
+// ═══════════════════════════════════════════════════════════
+let tesseractLoaded = false;
+
+async function ensureTesseract() {
+  if (tesseractLoaded) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  tesseractLoaded = true;
+}
+
+async function loadImage(file) {
+  loadedPdfFile = null;
+  const progress = document.getElementById('pdfProgress');
+  const fill     = document.getElementById('pdfProgressFill');
+  const label    = document.getElementById('pdfProgressLabel');
+  const dropZone = document.getElementById('pdfDropZone');
+
+  dropZone.style.display = 'none';
+  progress.style.display = 'block';
+  fill.style.width  = '5%';
+  label.textContent = 'Loading OCR engine…';
+
+  try {
+    await ensureTesseract();
+    fill.style.width  = '15%';
+    label.textContent = 'Recognising text…';
+
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          fill.style.width  = (15 + Math.round(m.progress * 80)) + '%';
+          label.textContent = `Recognising… ${Math.round(m.progress * 100)}%`;
+        }
+      }
+    });
+
+    const { data: { text } } = await worker.recognize(file);
+    await worker.terminate();
+
+    const cleaned = text.trim();
+    fill.style.width  = '100%';
+    label.textContent = `Done — ${cleaned.length.toLocaleString()} characters extracted`;
+    document.getElementById('textInput').value = cleaned;
+    try { localStorage.setItem(STORAGE_KEY, cleaned); } catch(e) {}
+    showToast(`OCR done: ${cleaned.length.toLocaleString()} chars`, true);
+
+    setTimeout(() => {
+      progress.style.display = 'none';
+      dropZone.style.display = 'block';
+      showPdfActions(file.name + ' (OCR)');
+    }, 1400);
+  } catch(err) {
+    console.error(err);
+    showToast('OCR failed: ' + err.message);
+    progress.style.display = 'none';
+    dropZone.style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  IMAGE SEND (base64 encode → QR chain)
+// ═══════════════════════════════════════════════════════════
+let imgSendFile = null;
+let imgSendB64  = null;
+let imgSendMime = 'image/jpeg';
+let srcImg      = null;
+let srcOrigBytes = 0;
+
+function handleImgSendDragOver(e)  { e.preventDefault(); document.getElementById('imgSendZone').classList.add('drag-over'); }
+function handleImgSendDragLeave(e) { document.getElementById('imgSendZone').classList.remove('drag-over'); }
+function handleImgSendDrop(e) {
+  e.preventDefault();
+  document.getElementById('imgSendZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) prepareImgSend(file);
+  else showToast('Drop an image file');
+}
+function handleImgSendSelect(e) { const f = e.target.files[0]; if (f) prepareImgSend(f); e.target.value = ''; }
+
+// srcOrigB64 holds the original file's base64 so we can clamp output size
+let srcOrigB64 = '';
+
+function prepareImgSend(file) {
+  imgSendFile  = file;
+  // Always use JPEG for the send path — quality slider is meaningful on JPEG only.
+  // PNG is lossless so quality param does nothing and files can be huge.
+  imgSendMime  = 'image/jpeg';
+  srcOrigBytes = file.size;
+  document.getElementById('imgSendName').textContent  = file.name;
+  document.getElementById('imgSendStats').textContent = 'Loading…';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    srcOrigB64    = dataUrl.split(',')[1]; // keep original for size clamping
+
+    const img = new Image();
+    img.onload = () => {
+      srcImg = img;
+      const naturalW = img.naturalWidth;
+      // Set max-width slider to image's natural width — no upscaling ever
+      const maxWSlider = document.getElementById('imgMaxW');
+      maxWSlider.max   = naturalW;
+      maxWSlider.value = naturalW; // default: full size, user can reduce
+      maxWSlider.step  = Math.max(10, Math.round(naturalW / 20)); // ~20 steps
+      document.getElementById('imgSendThumb').src = dataUrl;
+      document.getElementById('imgSendZone').style.display    = 'none';
+      document.getElementById('imgSendPreview').style.display = 'block';
+      updateImgPreview();
+    };
+    img.onerror = () => showToast('Could not read image');
+    img.src = dataUrl;
+  };
+  reader.onerror = () => showToast('File read failed');
+  reader.readAsDataURL(file);
+}
+
+let _imgPreviewTimer = null;
+function updateImgPreview() {
+  // Labels update immediately for responsive feel
+  const qualVal = parseInt(document.getElementById('imgQuality').value);
+  const maxWVal = parseInt(document.getElementById('imgMaxW').value);
+  document.getElementById('imgQualityVal').textContent = qualVal;
+  document.getElementById('imgMaxWVal').textContent    = maxWVal;
+
+  if (!srcImg) return;
+
+  // Debounce the expensive canvas re-render
+  clearTimeout(_imgPreviewTimer);
+  _imgPreviewTimer = setTimeout(() => _renderImgPreview(qualVal, maxWVal), 120);
+}
+
+function _renderImgPreview(qualVal, maxWVal) {
+  const naturalW = srcImg.naturalWidth;
+  const naturalH = srcImg.naturalHeight;
+  const clampedW = Math.min(maxWVal, naturalW);
+  const scale    = clampedW / naturalW;
+  const w = Math.round(naturalW * scale);
+  const h = Math.round(naturalH * scale);
+
+  const quality = qualVal / 100;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(srcImg, 0, 0, w, h);
+
+  const dataUrl   = canvas.toDataURL('image/jpeg', quality);
+  imgSendB64      = dataUrl.split(',')[1];
+  imgSendMime     = 'image/jpeg';
+
+  document.getElementById('imgSendThumb').src = dataUrl;
+
+  const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
+  const payloadLen = imgSendFile.name.length + 'image/jpeg'.length + 2 + imgSendB64.length;
+  const codes      = Math.ceil(payloadLen / chunkSize);
+  const outKB      = (imgSendB64.length * 0.75 / 1024).toFixed(1);
+  const origKB     = (srcOrigBytes / 1024).toFixed(1);
+  document.getElementById('imgSendStats').textContent =
+    `${w}×${h}px · ${origKB}KB orig → ${outKB}KB · ~${codes} QR codes`;
+}
+
+function encodeImageChain() {
+  if (!imgSendB64) { showToast('No image loaded'); return; }
+  const fname      = imgSendFile.name;
+  const payload    = `${fname}|image/jpeg|${imgSendB64}`;
+  const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
+  const total      = Math.ceil(payload.length / chunkSize);
+  const qrfChunks  = [];
+  for (let i = 0; i < total; i++) {
+    const part = payload.slice(i * chunkSize, (i + 1) * chunkSize);
+    qrfChunks.push(`QRF|${i+1}/${total}|${part}`);
+  }
+  allChunks   = qrfChunks;
+  ssChunks    = qrfChunks;
+  currentPage = 0;
+  document.getElementById('seqCount').textContent = `${total} code${total > 1 ? 's' : ''}`;
+  document.getElementById('qrSequence').style.display = 'block';
+  document.getElementById('broadcastBtn').style.display = 'flex';
+  renderPage(0);
+  showToast(`Image: ${total} QR codes`, true);
+}
+
+function clearImgSend() {
+  imgSendFile = imgSendB64 = null; srcImg = null; srcOrigB64 = '';
+  document.getElementById('imgSendPreview').style.display = 'none';
+  document.getElementById('imgSendZone').style.display    = 'block';
+  document.getElementById('imgSendThumb').src = '';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILE RECEIVE
+// ═══════════════════════════════════════════════════════════
+let fileChunks   = {};
+let recvFileName = 'image.png';
+let recvMime     = 'image/png';
+let recvB64Full  = '';
+
+function processFileQR(data) {
+  const parts = data.split('|');
+  if (parts.length < 3) return;
+  const meta    = parts[1];
+  const payload = parts.slice(2).join('|');
+  const [idxStr, totStr] = meta.split('/');
+  const idx   = parseInt(idxStr);
+  const total = parseInt(totStr);
+  if (isNaN(idx) || isNaN(total)) return;
+  if (fileChunks[idx]) return;
+
+  fileChunks[idx]   = payload;
+  scannedChunks[idx] = true;   // mirror into scannedChunks so the timeline tracks it
+  totalChunks        = total;
+
+  const got = Object.keys(fileChunks).length;
+  showToast(`Image chunk ${idx}/${total}`, true);
+  // Single status — the timeline now shows the full picture, no need for a second counter
+  setStatus(got === total ? '✓ Image complete — tap Download!' : `Scanning image… ${got}/${total}`);
+  updateTimeline(total);
+  if (got === total) assembleFile(total);
+}
+
+function assembleFile(total) {
+  const combined   = Array.from({length: total}, (_, i) => fileChunks[i+1] || '').join('');
+  const firstPipe  = combined.indexOf('|');
+  const secondPipe = combined.indexOf('|', firstPipe + 1);
+  recvFileName = combined.slice(0, firstPipe);
+  recvMime     = combined.slice(firstPipe + 1, secondPipe);
+  recvB64Full  = combined.slice(secondPipe + 1);
+  const kb = (recvB64Full.length * 0.75 / 1024).toFixed(1);
+
+  document.getElementById('fileDownloadName').textContent = recvFileName;
+  document.getElementById('fileDownloadSub').textContent  = `${recvMime} · ${kb}KB · auto-saved ✓`;
+  document.getElementById('fileDownloadBox').style.display = 'flex';
+  setStatus('✓ Image complete — auto-saved!');
+
+  // Auto-save immediately — don't make the user remember to click Download
+  autoSaveFile();
+}
+
+function autoSaveFile() {
+  if (!recvB64Full) return;
+  try {
+    // Convert base64 to binary for a proper Blob — avoids data: URI size limits
+    const byteChars = atob(recvB64Full);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob    = new Blob([bytes], { type: recvMime });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href     = blobUrl;
+    a.download = recvFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+    showToast('Image saved automatically ✓', true);
+  } catch(e) {
+    showToast('Tap Download to save the image', false);
+  }
+}
+
+function downloadReceivedFile() {
+  if (!recvB64Full) return;
+  const a = document.createElement('a');
+  a.href = `data:${recvMime};base64,${recvB64Full}`;
+  a.download = recvFileName;
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg, good) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (good ? ' green' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 2200);
+}
+</script>
+</body>
+</html>
