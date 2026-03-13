@@ -2330,7 +2330,10 @@ function _renderImgPreview(qualVal, maxWVal) {
 
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(srcImg, 0, 0, w, h);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(srcImg, 0, 0, w, h);
 
   const dataUrl   = canvas.toDataURL('image/jpeg', quality);
   imgSendB64      = dataUrl.split(',')[1];
