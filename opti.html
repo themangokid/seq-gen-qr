@@ -499,6 +499,9 @@
     border-radius: var(--radius);
     background: #1a1a18;
     overflow: hidden;
+    /* Full width, never shrinks — sits between camera and text box */
+    width: 100%;
+    flex-shrink: 0;
   }
 
   .tl-topbar {
@@ -895,9 +898,9 @@
         </div>
         <div class="img-quality-row">
           <label class="img-quality-label">Quality <span id="imgQualityVal">80</span>%</label>
-          <input type="range" id="imgQuality" min="10" max="100" value="80" step="5" oninput="updateImgPreview(this.value)">
-          <label class="img-quality-label">Max width <span id="imgMaxWVal">1200</span>px</label>
-          <input type="range" id="imgMaxW" min="200" max="2000" value="1200" step="100" oninput="updateImgPreview(this.value)">
+          <input type="range" id="imgQuality" min="10" max="100" value="80" step="5" oninput="updateImgPreview()">
+          <label class="img-quality-label">Max width <span id="imgMaxWVal">—</span>px</label>
+          <input type="range" id="imgMaxW" min="100" max="4000" value="1200" step="50" oninput="updateImgPreview()">
         </div>
       </div>
     </div>
@@ -2141,10 +2144,16 @@ function prepareImgSend(file) {
     const img = new Image();
     img.onload = () => {
       srcImg = img;
+      const naturalW = img.naturalWidth;
+      // Set max-width slider to image's natural width — no upscaling ever
+      const maxWSlider = document.getElementById('imgMaxW');
+      maxWSlider.max   = naturalW;
+      maxWSlider.value = naturalW; // default: full size, user can reduce
+      maxWSlider.step  = Math.max(10, Math.round(naturalW / 20)); // ~20 steps
       document.getElementById('imgSendThumb').src = dataUrl;
       document.getElementById('imgSendZone').style.display    = 'none';
       document.getElementById('imgSendPreview').style.display = 'block';
-      updateImgPreview(document.getElementById('imgQuality').value);
+      updateImgPreview();
     };
     img.onerror = () => showToast('Could not read image');
     img.src = dataUrl;
@@ -2153,44 +2162,44 @@ function prepareImgSend(file) {
   reader.readAsDataURL(file);
 }
 
-function updateImgPreview(qualVal) {
+function updateImgPreview(changedSlider) {
+  // Update displayed labels for both sliders independently
+  const qualVal = parseInt(document.getElementById('imgQuality').value);
+  const maxWVal = parseInt(document.getElementById('imgMaxW').value);
   document.getElementById('imgQualityVal').textContent = qualVal;
-  document.getElementById('imgMaxWVal').textContent    = document.getElementById('imgMaxW').value;
+  document.getElementById('imgMaxWVal').textContent    = maxWVal;
+
   if (!srcImg) return;
 
-  const maxW    = parseInt(document.getElementById('imgMaxW').value);
-  const quality = parseInt(qualVal) / 100;
-  const scale   = Math.min(1, maxW / srcImg.naturalWidth);
-  const w = Math.round(srcImg.naturalWidth  * scale);
-  const h = Math.round(srcImg.naturalHeight * scale);
+  // Cap to natural width — we never upscale
+  const naturalW = srcImg.naturalWidth;
+  const naturalH = srcImg.naturalHeight;
+  const clampedW = Math.min(maxWVal, naturalW); // never exceed original
+  const scale    = clampedW / naturalW;
+  const w = Math.round(naturalW * scale);
+  const h = Math.round(naturalH * scale);
+
+  const quality = qualVal / 100;
 
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   canvas.getContext('2d').drawImage(srcImg, 0, 0, w, h);
 
-  // Always encode as JPEG — quality slider is effective here
-  const dataUrl    = canvas.toDataURL('image/jpeg', quality);
-  const candidateB64 = dataUrl.split(',')[1];
+  // Always JPEG — never fall back to the original file blob
+  // (original could be PNG → huge base64 → denser QR codes → scan failures)
+  const dataUrl   = canvas.toDataURL('image/jpeg', quality);
+  imgSendB64      = dataUrl.split(',')[1];
+  imgSendMime     = 'image/jpeg';
 
-  // Clamp: never let re-encoding produce a larger payload than the original.
-  // This happens with low-res or already-compressed images at high quality.
-  if (srcOrigB64 && candidateB64.length > srcOrigB64.length) {
-    imgSendB64 = srcOrigB64;
-  } else {
-    imgSendB64 = candidateB64;
-    // Update thumbnail to reflect the re-encoded result
-    document.getElementById('imgSendThumb').src = dataUrl;
-  }
+  document.getElementById('imgSendThumb').src = dataUrl;
 
   const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
   const payloadLen = imgSendFile.name.length + 'image/jpeg'.length + 2 + imgSendB64.length;
   const codes      = Math.ceil(payloadLen / chunkSize);
   const outKB      = (imgSendB64.length * 0.75 / 1024).toFixed(1);
   const origKB     = (srcOrigBytes / 1024).toFixed(1);
-  const saved      = Math.round((1 - imgSendB64.length / (srcOrigB64.length || 1)) * 100);
-  const savedStr   = saved > 0 ? ` ↓${saved}%` : '';
   document.getElementById('imgSendStats').textContent =
-    `${w}×${h}px · ${origKB}KB → ${outKB}KB${savedStr} · ~${codes} QR codes`;
+    `${w}×${h}px · ${origKB}KB orig → ${outKB}KB · ~${codes} QR codes`;
 }
 
 function encodeImageChain() {
@@ -2260,10 +2269,30 @@ function assembleFile(total) {
   recvMime     = combined.slice(firstPipe + 1, secondPipe);
   recvB64Full  = combined.slice(secondPipe + 1);
   const kb = (recvB64Full.length * 0.75 / 1024).toFixed(1);
+
   document.getElementById('fileDownloadName').textContent = recvFileName;
-  document.getElementById('fileDownloadSub').textContent  = `${recvMime} · ${kb}KB`;
+  document.getElementById('fileDownloadSub').textContent  = `${recvMime} · ${kb}KB · auto-saved ✓`;
   document.getElementById('fileDownloadBox').style.display = 'flex';
-  setStatus('✓ Image complete — tap Download!');
+  setStatus('✓ Image complete — auto-saved!');
+
+  // Auto-save immediately — don't make the user remember to click Download
+  autoSaveFile();
+}
+
+function autoSaveFile() {
+  if (!recvB64Full) return;
+  try {
+    const a = document.createElement('a');
+    a.href     = `data:${recvMime};base64,${recvB64Full}`;
+    a.download = recvFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Image saved automatically ✓', true);
+  } catch(e) {
+    // Some browsers block auto-download — fall back to manual button silently
+    showToast('Tap Download to save the image', false);
+  }
 }
 
 function downloadReceivedFile() {
