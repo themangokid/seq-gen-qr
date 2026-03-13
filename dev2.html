@@ -2302,6 +2302,8 @@ function onSliderManual() {
   document.querySelectorAll('.img-compress-btn').forEach(b => b.classList.remove('active'));
   updateImgPreview();
 }
+
+let _imgPreviewTimer = null;
 function updateImgPreview() {
   // Labels update immediately for responsive feel
   const qualVal = parseInt(document.getElementById('imgQuality').value);
