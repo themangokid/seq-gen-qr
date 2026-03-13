@@ -681,31 +681,87 @@
 
   /* ── SLIDESHOW ── */
   #slideshow { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; }
-  .ss-top { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: #111; border-bottom: 2px solid #333; }
-  #ssLabel { font-family: 'DM Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #aaa; }
-  .ss-close { font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; background: #333; color: #fff; border: none; padding: 8px 14px; border-radius: 2px; cursor: pointer; }
-  .ss-close:hover { background: var(--accent); }
-  .ss-qr-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; }
-  #ssQrImg { width: min(80vw, 80vh, 500px); height: min(80vw, 80vh, 500px); object-fit: contain; border-radius: 4px; }
-  .ss-bottom { padding: 14px 20px 20px; background: #111; border-top: 2px solid #333; }
-  .ss-progress-track { height: 4px; background: #333; border-radius: 2px; margin-bottom: 12px; overflow: hidden; cursor: pointer; }
+
+  /* Top bar */
+  .ss-top { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0d0d0d; border-bottom: 1px solid #222; gap: 16px; }
+  .ss-top-left { display: flex; align-items: baseline; gap: 12px; }
+  #ssLabel { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #555; }
+  .ss-loop-tag { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #f39c12; background: rgba(243,156,18,0.12); border: 1px solid rgba(243,156,18,0.3); padding: 2px 8px; border-radius: 20px; display: none; }
+  .ss-loop-tag.visible { display: inline; }
+  .ss-close { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; background: #222; color: #aaa; border: none; padding: 7px 14px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .ss-close:hover { background: var(--accent); color: #fff; }
+
+  /* QR + big frame number side by side */
+  .ss-main { flex: 1; display: flex; align-items: center; justify-content: center; gap: 40px; padding: 16px 24px; min-height: 0; }
+
+  .ss-qr-wrap { display: flex; align-items: center; justify-content: center; }
+  #ssQrImg { width: min(60vw, 70vh, 480px); height: min(60vw, 70vh, 480px); object-fit: contain; border-radius: 4px; }
+
+  /* Frame counter panel */
+  .ss-frame-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .ss-frame-num {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(52px, 8vw, 96px);
+    font-weight: 900;
+    color: #fff;
+    line-height: 1;
+    letter-spacing: -2px;
+  }
+  .ss-frame-num.calibration-num { color: #f39c12; font-size: clamp(32px, 5vw, 56px); letter-spacing: -1px; }
+
+  .ss-frame-of {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: #555;
+    letter-spacing: 0.06em;
+    margin-top: -4px;
+  }
+
+  .ss-missed-hint {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: rgba(192,57,43,0.18);
+    border: 1px solid rgba(192,57,43,0.4);
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: #e74c3c;
+    letter-spacing: 0.05em;
+    line-height: 1.5;
+    max-width: 140px;
+    display: none;
+  }
+  .ss-missed-hint.visible { display: block; }
+
+  /* Bottom controls */
+  .ss-bottom { padding: 10px 20px 16px; background: #0d0d0d; border-top: 1px solid #222; }
+  .ss-progress-track { height: 3px; background: #222; border-radius: 2px; margin-bottom: 10px; overflow: hidden; cursor: pointer; }
   .ss-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width linear; }
   .ss-progress-bar.calibration { background: #f39c12; }
-  .ss-info { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  #ssCodeInfo { font-family: 'DM Mono', monospace; font-size: 12px; color: #888; letter-spacing: 0.05em; }
-  .ss-speed { display: flex; align-items: center; gap: 8px; }
-  .ss-spd-btn { background: #333; color: #fff; border: none; width: 32px; height: 32px; border-radius: 2px; font-size: 18px; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; }
-  .ss-spd-btn:hover { background: #555; }
-  #ssSpdLabel { font-family: 'DM Mono', monospace; font-size: 12px; color: #aaa; min-width: 32px; text-align: center; }
-  .ss-jump { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .ss-jump-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); color: #fff; border-radius: 4px; width: 36px; height: 34px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.12s; -webkit-tap-highlight-color: transparent; }
-  .ss-jump-btn:hover { background: rgba(255,255,255,0.18); }
-  .ss-jump-input-wrap { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; overflow: hidden; }
-  .ss-jump-input { background: rgba(255,255,255,0.08); border: none; color: #fff; font-family: 'DM Mono', monospace; font-size: 13px; width: 56px; height: 34px; padding: 0 8px; text-align: center; outline: none; -moz-appearance: textfield; }
+
+  .ss-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  .ss-jump { display: flex; align-items: center; gap: 6px; }
+  .ss-jump-btn { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); color: #ccc; border-radius: 4px; width: 34px; height: 32px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.12s; -webkit-tap-highlight-color: transparent; }
+  .ss-jump-btn:hover { background: rgba(255,255,255,0.16); }
+  .ss-jump-input-wrap { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
+  .ss-jump-input { background: rgba(255,255,255,0.07); border: none; color: #fff; font-family: 'DM Mono', monospace; font-size: 13px; width: 52px; height: 32px; padding: 0 8px; text-align: center; outline: none; -moz-appearance: textfield; }
   .ss-jump-input::-webkit-outer-spin-button, .ss-jump-input::-webkit-inner-spin-button { -webkit-appearance: none; }
-  .ss-jump-input::placeholder { color: rgba(255,255,255,0.3); }
-  .ss-jump-go { background: rgba(255,255,255,0.15); border: none; border-left: 1px solid rgba(255,255,255,0.2); color: #fff; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; height: 34px; padding: 0 10px; cursor: pointer; transition: background 0.12s; }
-  .ss-jump-go:hover { background: rgba(255,255,255,0.28); }
+  .ss-jump-input::placeholder { color: rgba(255,255,255,0.25); }
+  .ss-jump-go { background: rgba(255,255,255,0.12); border: none; border-left: 1px solid rgba(255,255,255,0.15); color: #ccc; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; height: 32px; padding: 0 10px; cursor: pointer; transition: background 0.12s; }
+  .ss-jump-go:hover { background: rgba(255,255,255,0.24); }
+
+  .ss-speed { display: flex; align-items: center; gap: 6px; }
+  .ss-spd-btn { background: #222; color: #aaa; border: none; width: 30px; height: 30px; border-radius: 2px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .ss-spd-btn:hover { background: #333; color: #fff; }
+  #ssSpdLabel { font-family: 'DM Mono', monospace; font-size: 11px; color: #666; min-width: 36px; text-align: center; }
 
   /* ── HAMBURGER ── */
   header { position: relative; }
@@ -945,35 +1001,46 @@
 <!-- Slideshow overlay -->
 <div id="slideshow" style="display:none">
   <div class="ss-top">
-    <span id="ssLabel">CALIBRATION</span>
+    <div class="ss-top-left">
+      <span id="ssLabel">BROADCAST</span>
+      <span class="ss-loop-tag" id="ssLoopTag">LOOP 2</span>
+    </div>
     <button class="ss-close" onclick="closeSlideshow()">✕ Exit</button>
   </div>
-  <div class="ss-qr-wrap">
-    <img id="ssQrImg" src="" alt="QR">
+
+  <div class="ss-main">
+    <div class="ss-qr-wrap">
+      <img id="ssQrImg" src="" alt="QR">
+    </div>
+    <div class="ss-frame-panel">
+      <div class="ss-frame-num" id="ssFrameNum">—</div>
+      <div class="ss-frame-of" id="ssFrameOf">of —</div>
+      <div class="ss-missed-hint" id="ssMissedHint"></div>
+    </div>
   </div>
+
   <div class="ss-bottom">
     <div class="ss-progress-track" onclick="handleProgressClick(event)" title="Click to jump">
       <div class="ss-progress-bar" id="ssProgressBar"></div>
     </div>
-    <div class="ss-info">
-      <span id="ssCodeInfo">Calibration — point your phone camera here</span>
+    <div class="ss-controls-row">
+      <div class="ss-jump">
+        <button class="ss-jump-btn" onclick="jumpFirst()">⏮</button>
+        <button class="ss-jump-btn" onclick="jumpPrev()">◀</button>
+        <button class="ss-jump-btn" id="ssPlayPause" onclick="togglePlay()">⏸</button>
+        <button class="ss-jump-btn" onclick="jumpNext()">▶</button>
+        <button class="ss-jump-btn" onclick="jumpLast()">⏭</button>
+        <div class="ss-jump-input-wrap">
+          <input type="number" id="ssJumpInput" class="ss-jump-input" min="1" placeholder="…"
+                 onkeydown="if(event.key==='Enter')jumpTo()"
+                 oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+          <button class="ss-jump-go" onclick="jumpTo()">Go</button>
+        </div>
+      </div>
       <div class="ss-speed">
         <button class="ss-spd-btn" onclick="adjustSpeed(-200)">−</button>
         <span id="ssSpdLabel">0.16s</span>
         <button class="ss-spd-btn" onclick="adjustSpeed(200)">+</button>
-      </div>
-    </div>
-    <div class="ss-jump" id="ssJump">
-      <button class="ss-jump-btn" onclick="jumpFirst()">⏮</button>
-      <button class="ss-jump-btn" onclick="jumpPrev()">◀</button>
-      <button class="ss-jump-btn ss-playpause" id="ssPlayPause" onclick="togglePlay()">⏸</button>
-      <button class="ss-jump-btn" onclick="jumpNext()">▶</button>
-      <button class="ss-jump-btn" onclick="jumpLast()">⏭</button>
-      <div class="ss-jump-input-wrap">
-        <input type="number" id="ssJumpInput" class="ss-jump-input" min="1" placeholder="…"
-               onkeydown="if(event.key==='Enter')jumpTo()"
-               oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-        <button class="ss-jump-go" onclick="jumpTo()">Go</button>
       </div>
     </div>
   </div>
@@ -1594,27 +1661,66 @@ function advanceSlide() {
 }
 
 function showSlide(idx) {
-  const img   = document.getElementById('ssQrImg');
-  const label = document.getElementById('ssLabel');
-  const info  = document.getElementById('ssCodeInfo');
-  const bar   = document.getElementById('ssProgressBar');
-  const total = ssChunks.length;
+  const img       = document.getElementById('ssQrImg');
+  const label     = document.getElementById('ssLabel');
+  const loopTag   = document.getElementById('ssLoopTag');
+  const frameNum  = document.getElementById('ssFrameNum');
+  const frameOf   = document.getElementById('ssFrameOf');
+  const missHint  = document.getElementById('ssMissedHint');
+  const bar       = document.getElementById('ssProgressBar');
+  const total     = ssChunks.length;
 
   if (idx === -1) {
     img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${CAL_PAYLOAD}`;
     label.textContent = 'CALIBRATION';
     label.style.color = '#f39c12';
-    info.textContent  = 'Calibration — point your phone camera here and hold steady';
-    bar.style.width   = '0%';
+    loopTag.classList.remove('visible');
+    frameNum.textContent = 'CAL';
+    frameNum.className = 'ss-frame-num calibration-num';
+    frameOf.textContent  = 'point camera here';
+    missHint.classList.remove('visible');
+    bar.style.width = '0%';
     bar.style.transitionDuration = '0ms';
     bar.className = 'ss-progress-bar calibration';
   } else {
-    const payload = allChunks[idx]; // already encoded
+    const payload = allChunks[idx];
     img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
-    label.textContent = `CODE ${idx + 1} / ${total}${ssLoopCount > 0 ? ' · LOOP ' + (ssLoopCount + 1) : ''}`;
-    label.style.color = '#aaa';
-    const previewText = payload.split('|').slice(2).join('|');
-    info.textContent  = `"${previewText.slice(0, 50)}${previewText.length > 50 ? '…' : ''}"`;
+
+    label.textContent = 'BROADCAST';
+    label.style.color = '#555';
+
+    // Loop indicator
+    if (ssLoopCount > 0) {
+      loopTag.textContent = `LOOP ${ssLoopCount + 1}`;
+      loopTag.classList.add('visible');
+    } else {
+      loopTag.classList.remove('visible');
+    }
+
+    // Big frame number
+    frameNum.textContent = idx + 1;
+    frameNum.className = 'ss-frame-num';
+    frameOf.textContent = `of ${total}`;
+
+    // Missed-frames hint — check scannedChunks from the scanner side
+    // Show if this frame or nearby frames haven't been received yet
+    const frameIdx = idx + 1; // 1-based
+    const isThisMissed = scannedChunks && !scannedChunks[frameIdx] && lastKnownTotal > 0;
+    // Also find how many frames in a window around current are missing
+    if (isThisMissed) {
+      let runStart = frameIdx, runEnd = frameIdx;
+      while (runStart > 1 && !scannedChunks[runStart - 1]) runStart--;
+      while (runEnd < lastKnownTotal && !scannedChunks[runEnd + 1]) runEnd++;
+      const runLen = runEnd - runStart + 1;
+      missHint.textContent = runLen > 1
+        ? `Not scanned\n${runStart}–${runEnd} (${runLen} frames)`
+        : `Not scanned yet`;
+      missHint.classList.add('visible');
+    } else {
+      missHint.classList.remove('visible');
+    }
+
+    // Progress bar
     bar.style.transitionDuration = '0ms';
     bar.style.width = ((idx / total) * 100) + '%';
     bar.className = 'ss-progress-bar';
