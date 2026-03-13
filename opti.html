@@ -695,7 +695,7 @@
   .ss-close:hover { background: var(--accent); color: #fff; }
 
   /* QR + big frame number side by side */
-  .ss-main { flex: 1; display: flex; align-items: center; justify-content: center; gap: 40px; padding: 16px 24px; min-height: 0; }
+  .ss-main { flex: 1; display: flex; align-items: center; justify-content: center; gap: 40px; padding: 16px 24px; min-height: 0; position: relative; }
 
   .ss-qr-wrap { display: flex; align-items: center; justify-content: center; }
   #ssQrImg { width: min(60vw, 70vh, 480px); height: min(60vw, 70vh, 480px); object-fit: contain; border-radius: 4px; }
@@ -1008,17 +1008,17 @@
       <span id="ssLabel">BROADCAST</span>
       <span class="ss-loop-tag" id="ssLoopTag">LOOP 2</span>
     </div>
+    <span id="ssFrameCounter" style="font-family:'DM Mono',monospace;font-size:12px;color:#666;letter-spacing:0.08em;"></span>
     <button class="ss-close" onclick="closeSlideshow()">✕ Exit</button>
   </div>
 
-  <div class="ss-main">
+  <div class="ss-main" id="ssTapArea" onclick="ssTapToStart()" style="cursor:pointer">
     <div class="ss-qr-wrap">
       <img id="ssQrImg" src="" alt="QR">
     </div>
-    <div class="ss-frame-panel">
-      <div class="ss-frame-num" id="ssFrameNum">—</div>
-      <div class="ss-frame-of" id="ssFrameOf">of —</div>
-      <div class="ss-missed-hint" id="ssMissedHint"></div>
+    <!-- Tap-to-start overlay, hidden once started -->
+    <div id="ssTapOverlay" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;">
+      <div style="font-family:'DM Mono',monospace;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.45);background:rgba(0,0,0,0.55);padding:12px 24px;border-radius:4px;border:1px solid rgba(255,255,255,0.15);">Tap anywhere to start</div>
     </div>
   </div>
 
@@ -1646,9 +1646,25 @@ function openSlideshow() {
   document.getElementById('slideshow').style.display = 'flex';
   ssCurrent   = -1;
   ssLoopCount = 0;
-  showSlide(-1);
   clearInterval(ssInterval);
+  ssInterval = null;
+  showSlide(-1);
+  // Show tap-to-start overlay
+  const overlay = document.getElementById('ssTapOverlay');
+  if (overlay) overlay.style.display = 'flex';
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '▶'; btn.style.background = 'rgba(39,174,96,0.35)'; }
+}
+
+function ssTapToStart() {
+  const overlay = document.getElementById('ssTapOverlay');
+  if (!overlay || overlay.style.display === 'none') return; // already started
+  overlay.style.display = 'none';
+  ssCurrent = 0;
+  showSlide(0);
   ssInterval = setInterval(advanceSlide, ssSpeed);
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '⏸'; btn.style.background = ''; }
 }
 
 function closeSlideshow() {
@@ -1667,9 +1683,7 @@ function showSlide(idx) {
   const img       = document.getElementById('ssQrImg');
   const label     = document.getElementById('ssLabel');
   const loopTag   = document.getElementById('ssLoopTag');
-  const frameNum  = document.getElementById('ssFrameNum');
-  const frameOf   = document.getElementById('ssFrameOf');
-  const missHint  = document.getElementById('ssMissedHint');
+  const counter   = document.getElementById('ssFrameCounter');
   const bar       = document.getElementById('ssProgressBar');
   const total     = ssChunks.length;
 
@@ -1678,10 +1692,7 @@ function showSlide(idx) {
     label.textContent = 'CALIBRATION';
     label.style.color = '#f39c12';
     loopTag.classList.remove('visible');
-    frameNum.textContent = 'CAL';
-    frameNum.className = 'ss-frame-num calibration-num';
-    frameOf.textContent  = 'point camera here';
-    missHint.classList.remove('visible');
+    if (counter) counter.textContent = '';
     bar.style.width = '0%';
     bar.style.transitionDuration = '0ms';
     bar.className = 'ss-progress-bar calibration';
@@ -1692,7 +1703,8 @@ function showSlide(idx) {
     label.textContent = 'BROADCAST';
     label.style.color = '#555';
 
-    // Loop indicator
+    if (counter) counter.textContent = `${idx + 1} / ${total}`;
+
     if (ssLoopCount > 0) {
       loopTag.textContent = `LOOP ${ssLoopCount + 1}`;
       loopTag.classList.add('visible');
@@ -1700,30 +1712,6 @@ function showSlide(idx) {
       loopTag.classList.remove('visible');
     }
 
-    // Big frame number
-    frameNum.textContent = idx + 1;
-    frameNum.className = 'ss-frame-num';
-    frameOf.textContent = `of ${total}`;
-
-    // Missed-frames hint — check scannedChunks from the scanner side
-    // Show if this frame or nearby frames haven't been received yet
-    const frameIdx = idx + 1; // 1-based
-    const isThisMissed = scannedChunks && !scannedChunks[frameIdx] && lastKnownTotal > 0;
-    // Also find how many frames in a window around current are missing
-    if (isThisMissed) {
-      let runStart = frameIdx, runEnd = frameIdx;
-      while (runStart > 1 && !scannedChunks[runStart - 1]) runStart--;
-      while (runEnd < lastKnownTotal && !scannedChunks[runEnd + 1]) runEnd++;
-      const runLen = runEnd - runStart + 1;
-      missHint.textContent = runLen > 1
-        ? `Not scanned\n${runStart}–${runEnd} (${runLen} frames)`
-        : `Not scanned yet`;
-      missHint.classList.add('visible');
-    } else {
-      missHint.classList.remove('visible');
-    }
-
-    // Progress bar
     bar.style.transitionDuration = '0ms';
     bar.style.width = ((idx / total) * 100) + '%';
     bar.className = 'ss-progress-bar';
