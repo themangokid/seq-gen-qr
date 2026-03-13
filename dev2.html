@@ -1426,11 +1426,18 @@ async function startCamera() {
       video,
       result => processQR(result.data),
       {
-        onDecodeError: () => {}, // suppress "No image detected" / "No QR code found"
+        onDecodeError: () => {},
         preferredCamera: 'environment',
         highlightScanRegion: true,
-        highlightCodeOutline: true,
+        highlightCodeOutline: false,   // saves a canvas compositing pass every frame
         returnDetailedScanResult: true,
+        // Only scan the centre 70% of the frame — much faster on mobile
+        calculateScanRegion: (v) => {
+          const s = Math.round(Math.min(v.videoWidth, v.videoHeight) * 0.7);
+          const x = Math.round((v.videoWidth  - s) / 2);
+          const y = Math.round((v.videoHeight - s) / 2);
+          return { x, y, width: s, height: s, downScaledWidth: 400, downScaledHeight: 400 };
+        },
       }
     );
 
@@ -1491,61 +1498,72 @@ async function processQR(data) {
   lastScanned = idx;
   scannedChunks[idx] = payload;
 
-  await updateTextDisplay();
-  updateTimeline(total);
+  // Defer UI updates so the scanner worker isn't blocked
+  setTimeout(async () => {
+    await updateTextDisplay();
+    updateTimeline(total);
 
-  // Throttle toast during rapid scanning — show at most every 600ms
-  const now = Date.now();
-  if (!processQR._lastToast || now - processQR._lastToast > 600) {
-    showToast(`Code ${idx}/${total} scanned`, true);
-    processQR._lastToast = now;
-  }
-  setStatus(`✓ Got code ${idx}/${total}. ${Object.keys(scannedChunks).length < total ? 'Scan next…' : 'Complete!'}`);
-
-  if (Object.keys(scannedChunks).length === total) {
-    showToast(`All ${total} codes scanned ✓`, true);
-    setStatus('✓ All codes scanned — text complete!');
-  }
+    const now = Date.now();
+    if (!processQR._lastToast || now - processQR._lastToast > 600) {
+      showToast(`Code ${idx}/${total} scanned`, true);
+      processQR._lastToast = now;
+    }
+    const gotCount = Object.keys(scannedChunks).length;
+    setStatus(`✓ Got code ${idx}/${total}. ${gotCount < total ? 'Scan next…' : 'Complete!'}`);
+    if (gotCount === total) {
+      showToast(`All ${total} codes scanned ✓`, true);
+      setStatus('✓ All codes scanned — text complete!');
+    }
+  }, 0);
 }
 
 async function updateTextDisplay() {
   const box  = document.getElementById('accumulatedText');
   const keys = Object.keys(scannedChunks).map(Number).sort((a, b) => a - b);
+  const scanned = keys.length;
+  const pill = document.getElementById('progressPill');
 
-  // Image chains store `true` as the value (actual data is in fileChunks).
-  // Don't try to assemble/display them as text.
-  if (keys.length > 0 && scannedChunks[keys[0]] === true) {
-    box.textContent = `Receiving image… ${keys.length}/${totalChunks || '?'} chunks scanned`;
-    const scanned = keys.length;
-    const pill = document.getElementById('progressPill');
+  // Image chains — just update counter, no text assembly needed
+  if (scanned > 0 && scannedChunks[keys[0]] === true) {
+    box.textContent = `Receiving image… ${scanned}/${totalChunks || '?'} chunks scanned`;
     pill.textContent = totalChunks ? `${scanned}/${totalChunks}` : `${scanned} scanned`;
     pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
     return;
   }
 
-  // Rejoin chunks — OPT 14 means chunks are pre-trimmed, join with space
-  const reassembled = keys.map(k => scannedChunks[k]).join(' ');
-
-  let finalText = reassembled;
-
-  // OPT 3: decompress if the chain was compressed
-  if (isCompressed && totalChunks && keys.length === totalChunks) {
-    try {
-      finalText = await decompressText(reassembled.replace(/ /g, ''));
-    } catch(e) {
-      console.warn('Decompress failed:', e);
-    }
-  }
-
-  box.textContent = finalText;
-  box.classList.remove('flash-new');
-  void box.offsetWidth;
-  box.classList.add('flash-new');
-
-  const scanned = keys.length;
-  const pill = document.getElementById('progressPill');
   pill.textContent = totalChunks ? `${scanned}/${totalChunks} scanned` : `${scanned} scanned`;
   pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
+
+  // Only decompress + display full text on final scan; otherwise just show partial live text
+  // from the highest contiguous run — avoids O(n) rejoin on every single chunk
+  if (isCompressed) {
+    // For compressed chains: only attempt display on completion
+    if (totalChunks && scanned === totalChunks) {
+      const allPayload = keys.map(k => scannedChunks[k]).join('');
+      try {
+        box.textContent = await decompressText(allPayload);
+      } catch(e) {
+        box.textContent = allPayload;
+        console.warn('Decompress failed:', e);
+      }
+      box.classList.remove('flash-new'); void box.offsetWidth; box.classList.add('flash-new');
+    } else {
+      box.textContent = `Scanning… ${scanned}${totalChunks ? '/'+totalChunks : ''} chunks received`;
+    }
+    return;
+  }
+
+  // Uncompressed: show live text — but only reassemble the contiguous prefix
+  // (no point showing chunks 1–5 then 8 with a gap — just show 1–5)
+  let contiguousEnd = 0;
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i] === contiguousEnd + 1) contiguousEnd = keys[i];
+    else break;
+  }
+  const displayKeys = keys.filter(k => k <= contiguousEnd);
+  const text = displayKeys.map(k => scannedChunks[k]).join(' ');
+  box.textContent = text || 'Scan QR codes in order — text will appear here…';
+  box.classList.remove('flash-new'); void box.offsetWidth; box.classList.add('flash-new');
 }
 
 // ── SCAN TIMELINE ──
