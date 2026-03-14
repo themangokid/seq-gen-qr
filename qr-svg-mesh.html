@@ -1,0 +1,4377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Chain</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700;900&display=swap');
+
+  :root {
+    --ink: #0f0e0d;
+    --paper: #f5f0e8;
+    --paper2: #ede8dc;
+    --accent: #c0392b;
+    --accent2: #2c3e50;
+    --scan-green: #27ae60;
+    --svg-purple: #7c3aed;
+    --border: #0f0e0d;
+    --radius: 2px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    border-bottom: 3px solid var(--border);
+    padding: 20px 32px 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    background: var(--paper);
+  }
+
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(24px, 5vw, 38px);
+    font-weight: 900;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  header .tagline {
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 3px solid var(--border);
+  }
+
+  .tab {
+    flex: 1;
+    padding: 14px 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    background: var(--paper2);
+    color: #888;
+    transition: all 0.15s;
+    border-right: 2px solid var(--border);
+  }
+
+  .tab:last-child { border-right: none; }
+  .tab.active { background: var(--ink); color: var(--paper); }
+
+  .btn-broadcast {
+    margin-left: auto;
+    border-radius: 0;
+    border: none;
+    border-left: 2px solid var(--border);
+    background: var(--accent);
+    color: white;
+    padding: 14px 20px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .btn-broadcast:hover { background: #a93226; }
+
+  .panel { display: none; padding: 16px; }
+  .panel.active { display: block; }
+  @media (min-width: 480px) { .panel { padding: 28px 24px; } }
+
+  /* ── COMPRESSION BADGE ── */
+  .compression-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--scan-green);
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: 10px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .compression-badge.visible { opacity: 1; }
+
+  /* ── SVG BADGE ── */
+  .svg-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--svg-purple);
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: 6px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .svg-badge.visible { opacity: 1; }
+
+  /* ── GENERATE PANEL ── */
+  .gen-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 8px;
+  }
+
+  /* Drop zones */
+  .pdf-drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: var(--radius);
+    background: white;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 12px;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pdf-drop-zone:hover, .pdf-drop-zone.drag-over {
+    border-color: var(--ink);
+    background: var(--paper2);
+  }
+  .pdf-drop-zone.drag-over { border-style: solid; }
+
+  .drop-type-btn {
+    text-decoration: underline;
+    cursor: pointer;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .drop-type-btn:hover { color: var(--accent); }
+
+  .pdf-drop-icon { font-size: 28px; margin-bottom: 6px; opacity: 0.4; }
+  .pdf-drop-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .pdf-drop-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #aaa;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  .pdf-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: white;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    flex-wrap: wrap;
+  }
+  .pdf-file-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #555;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pdf-action-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: var(--radius);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pdf-action-btn.reload:hover { background: var(--ink); color: var(--paper); }
+  .pdf-action-btn.remove:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .pdf-progress { margin-bottom: 12px; }
+  .pdf-progress-bar { height: 3px; background: var(--paper2); border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+  .pdf-progress-fill { height: 100%; background: var(--ink); border-radius: 2px; width: 0%; transition: width 0.2s ease; }
+  .pdf-progress-label { font-family: 'DM Mono', monospace; font-size: 10px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  textarea {
+    width: 100%;
+    height: 140px;
+    padding: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    line-height: 1.6;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    color: var(--ink);
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  textarea:focus { border-color: var(--accent); }
+
+  .controls-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #666;
+  }
+  .ctrl-group label { white-space: nowrap; }
+  input[type=range] { width: 90px; accent-color: var(--accent); }
+
+  .btn {
+    padding: 13px 22px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--ink);
+    color: var(--paper);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:hover { background: var(--accent); border-color: var(--accent); }
+  .btn.secondary { background: transparent; color: var(--ink); }
+  .btn.secondary:hover { background: var(--paper2); }
+  .btn.purple { background: var(--svg-purple); border-color: var(--svg-purple); }
+  .btn.purple:hover { background: #5b21b6; border-color: #5b21b6; }
+
+  /* QR sequence */
+  #qrSequence { margin-top: 24px; }
+
+  .seq-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+  .seq-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; }
+  .seq-count { font-size: 11px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .qr-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media (min-width: 400px) { .qr-cards { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; } }
+
+  .qr-card {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    overflow: hidden;
+    animation: slideIn 0.3s ease forwards;
+    opacity: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s;
+  }
+  .qr-card:active { transform: scale(0.97); }
+
+  /* Modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--paper);
+    border: 3px solid var(--border);
+    border-radius: var(--radius);
+    max-width: 480px;
+    width: 100%;
+    overflow: hidden;
+    animation: slideIn 0.2s ease forwards;
+  }
+  .modal-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 16px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-close { background: none; border: none; color: var(--paper); font-size: 20px; cursor: pointer; line-height: 1; padding: 0 2px; opacity: 0.7; }
+  .modal-close:hover { opacity: 1; }
+  .modal-body {
+    padding: 20px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--ink);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .qr-card-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 6px 10px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+  }
+  .qr-card-header.svg-header { background: var(--svg-purple); }
+  .qr-card img { width: 100%; aspect-ratio: 1; display: block; }
+  .qr-card-preview {
+    padding: 8px 10px;
+    font-size: 10px;
+    color: #777;
+    line-height: 1.5;
+    border-top: 1px solid #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .page-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--paper2);
+    flex-wrap: wrap;
+  }
+  .page-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .page-btn:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+  .page-btn:disabled { opacity: 0.25; cursor: default; }
+  .page-stack { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .page-pip-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .page-pip {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 9px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    color: var(--ink);
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .page-pip-wrap:hover .page-pip { background: var(--paper2); }
+  .page-pip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .page-pip-label { font-size: 9px; color: #bbb; font-family: 'DM Mono', monospace; white-space: nowrap; }
+  .page-pip.active + .page-pip-label { color: var(--ink); }
+
+  .print-btn-row { margin-top: 16px; display: flex; gap: 10px; }
+
+  /* ── READ PANEL ── */
+  .read-layout { display: flex; flex-direction: column; gap: 20px; }
+  .scanner-box { border: 2px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #111; position: relative; }
+  #reader { width: 100%; min-height: 260px; }
+  #reader video { width: 100% !important; height: auto !important; max-height: 320px; object-fit: cover; }
+  .camera-start { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; gap: 14px; background: #111; min-height: 200px; }
+  .camera-start p { color: #aaa; font-size: 12px; text-align: center; letter-spacing: 0.04em; }
+  .scanner-status { background: rgba(0,0,0,0.7); color: white; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 14px; text-align: center; }
+
+  .text-output-box { border: 2px solid var(--border); border-radius: var(--radius); background: white; }
+  .text-output-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 8px 14px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .copy-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--paper);
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 20px;
+    padding: 2px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); }
+  .copy-btn.copied { background: var(--scan-green); border-color: var(--scan-green); }
+
+  .progress-pill {
+    background: var(--accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+  }
+  .progress-pill.done { background: var(--scan-green); }
+
+  #accumulatedText {
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--ink);
+    min-height: 120px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* SVG preview box in reader */
+  #svgPreviewBox {
+    padding: 16px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  #svgPreviewBox.visible { display: flex; }
+  #svgPreviewContainer {
+    width: 100%;
+    max-width: 400px;
+    border: 1px solid var(--paper2);
+    border-radius: 4px;
+    background: white;
+    overflow: hidden;
+  }
+  #svgPreviewContainer svg, #svgPreviewContainer img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .svg-preview-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+  }
+
+  .flash-new { animation: flashNew 0.6s ease; }
+  @keyframes flashNew {
+    0% { background: #fffde0; }
+    100% { background: white; }
+  }
+
+  /* ── SCAN TIMELINE ── */
+  .tl-wrap {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: #1a1a18;
+    overflow: hidden;
+    width: 100%;
+    flex-shrink: 0;
+  }
+  .tl-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    background: #111;
+    border-bottom: 1px solid #333;
+  }
+  .tl-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #777;
+    white-space: nowrap;
+  }
+  .tl-stats {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #aaa;
+    flex: 1;
+  }
+  .tl-missing-badge {
+    background: var(--accent);
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 2px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .tl-strip-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px 10px 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+  }
+  .tl-strip-wrap::-webkit-scrollbar { height: 4px; }
+  .tl-strip-wrap::-webkit-scrollbar-track { background: transparent; }
+  .tl-strip-wrap::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .tl-strip {
+    display: flex;
+    gap: 3px;
+    min-width: max-content;
+    align-items: flex-end;
+  }
+  .tl-cell {
+    flex-shrink: 0;
+    width: 28px;
+    height: 36px;
+    border-radius: 3px;
+    background: #2a2a28;
+    border: 1.5px solid #3a3a38;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+  }
+  .tl-cell:hover { transform: scaleY(1.12); border-color: #888; z-index: 1; }
+  .tl-cell-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 7.5px;
+    color: #555;
+    line-height: 1;
+  }
+  .tl-cell-bar {
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+    background: #3a3a38;
+    transition: background 0.2s;
+  }
+  .tl-cell.got { background: #1a3d27; border-color: var(--scan-green); }
+  .tl-cell.got .tl-cell-num { color: var(--scan-green); }
+  .tl-cell.got .tl-cell-bar { background: var(--scan-green); }
+  .tl-cell.got.svg-cell { background: #2d1a4a; border-color: var(--svg-purple); }
+  .tl-cell.got.svg-cell .tl-cell-num { color: #a78bfa; }
+  .tl-cell.got.svg-cell .tl-cell-bar { background: #a78bfa; }
+  .tl-cell.miss { background: #2d1414; border-color: #c0392b; animation: tlPulse 1.6s ease-in-out infinite; }
+  .tl-cell.miss .tl-cell-num { color: #e74c3c; }
+  .tl-cell.miss .tl-cell-bar { background: #e74c3c; }
+  @keyframes tlPulse {
+    0%, 100% { box-shadow: none; }
+    50% { box-shadow: 0 0 0 2px rgba(192,57,43,0.4); }
+  }
+  .tl-cell.current { outline: 2px solid #f39c12; outline-offset: 1px; }
+  .tl-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--accent);
+    border-top: 1px solid #a93226;
+  }
+  .tl-hint-icon { font-size: 14px; color: white; flex-shrink: 0; }
+  #tlHintText {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    flex: 1;
+    letter-spacing: 0.03em;
+  }
+  .tl-hint-dismiss {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tl-hint-dismiss:hover { background: rgba(255,255,255,0.35); }
+  .read-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ── SVG VECTORISE PANEL (inside img send preview) ── */
+  .svg-vectorise-section {
+    margin-top: 12px;
+    padding: 12px;
+    border: 2px solid var(--svg-purple);
+    border-radius: var(--radius);
+    background: #f8f5ff;
+  }
+  .svg-section-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--svg-purple);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .svg-options-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .svg-opt-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: flex;
+    justify-content: space-between;
+  }
+  .svg-preview-wrap {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .svg-thumb-box {
+    width: 100px;
+    height: 100px;
+    border: 1px solid #ddd;
+    border-radius: 2px;
+    overflow: hidden;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .svg-thumb-box svg, .svg-thumb-box img { width: 100%; height: 100%; object-fit: contain; }
+  .svg-stats-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .svg-stat {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #555;
+  }
+  .svg-stat strong { color: var(--svg-purple); }
+  .svg-progress {
+    margin-top: 8px;
+    display: none;
+  }
+  .svg-progress.visible { display: block; }
+  .svg-progress-bar { height: 3px; background: #e0d8ff; border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
+  .svg-progress-fill { height: 100%; background: var(--svg-purple); border-radius: 2px; width: 0%; transition: width 0.2s; }
+  .svg-progress-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--svg-purple); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Mode selector chips */
+  .svg-mode-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .svg-mode-chip {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border: 1.5px solid #c4b5fd;
+    border-radius: 20px;
+    cursor: pointer;
+    background: white;
+    color: var(--svg-purple);
+    transition: all 0.12s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .svg-mode-chip.active { background: var(--svg-purple); color: white; border-color: var(--svg-purple); }
+  .svg-mode-chip:hover:not(.active) { background: #f3f0ff; }
+
+  /* ── MISSING FRAMES SUMMARY ── */
+  .tl-missing-summary {
+    padding: 8px 12px;
+    background: #1a1a18;
+    border-top: 1px solid #2a2a28;
+    display: none;
+  }
+  .tl-missing-summary.visible { display: block; }
+  .tl-missing-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 5px;
+  }
+  .tl-missing-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .tl-miss-chip {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    background: #2d1414;
+    border: 1px solid #c0392b;
+    color: #e74c3c;
+    padding: 3px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.12s;
+  }
+  .tl-miss-chip:hover { background: #c0392b; color: white; }
+  .tl-miss-chip.range { background: #3d1a1a; }
+  .file-download-box { margin-top: 12px; padding: 14px; border: 2px solid var(--scan-green); border-radius: var(--radius); background: white; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .file-download-box.svg-box { border-color: var(--svg-purple); }
+  .file-download-icon { font-size: 28px; flex-shrink: 0; }
+  .file-download-info { flex: 1; font-family: "DM Mono", monospace; }
+  .file-download-name { font-size: 12px; font-weight: 500; color: var(--ink); }
+  .file-download-sub { font-size: 10px; color: #888; margin-top: 2px; }
+  .file-download-btn { font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 16px; background: var(--scan-green); color: white; border: none; border-radius: var(--radius); cursor: pointer; transition: opacity 0.15s; }
+  .file-download-btn.svg-btn { background: var(--svg-purple); }
+  .file-download-btn:hover { opacity: 0.85; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: transform 0.3s ease;
+    z-index: 10000;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.green { background: var(--scan-green); }
+  #toast.purple { background: var(--svg-purple); }
+
+  /* Print */
+  @media print {
+    header, .tabs, #generatePanel .controls-row, .print-btn-row,
+    #readPanel, textarea, .gen-label { display: none !important; }
+    .panel { display: block !important; padding: 0; }
+    .seq-header { break-inside: avoid; }
+    .qr-cards { grid-template-columns: repeat(3, 1fr); }
+    .qr-card { break-inside: avoid; }
+    body::before { display: none; }
+  }
+
+  /* ── SLIDESHOW ── */
+  #slideshow { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; }
+  .ss-top { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0d0d0d; border-bottom: 1px solid #222; gap: 16px; }
+  .ss-top-left { display: flex; align-items: baseline; gap: 12px; }
+  #ssLabel { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #555; }
+  .ss-loop-tag { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #f39c12; background: rgba(243,156,18,0.12); border: 1px solid rgba(243,156,18,0.3); padding: 2px 8px; border-radius: 20px; display: none; }
+  .ss-loop-tag.visible { display: inline; }
+  .ss-close { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; background: #222; color: #aaa; border: none; padding: 7px 14px; border-radius: 2px; cursor: pointer; flex-shrink: 0; }
+  .ss-close:hover { background: var(--accent); color: #fff; }
+  .ss-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; min-height: 0; position: relative; }
+  .ss-qr-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+  #ssQrImg {
+    width: min(85vw, 85vh);
+    height: min(85vw, 85vh);
+    object-fit: contain;
+    border-radius: 6px;
+    background: #fff;
+    padding: 16px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 8px 40px rgba(0,0,0,0.6);
+    display: block;
+  }
+  .ss-bottom { padding: 10px 20px 16px; background: #0d0d0d; border-top: 1px solid #222; }
+  .ss-progress-track { height: 3px; background: #222; border-radius: 2px; margin-bottom: 10px; overflow: hidden; cursor: pointer; }
+  .ss-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width linear; }
+  .ss-progress-bar.calibration { background: #f39c12; }
+  .ss-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .ss-jump { display: flex; align-items: center; gap: 6px; }
+  .ss-jump-btn { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); color: #ccc; border-radius: 4px; width: 34px; height: 32px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.12s; -webkit-tap-highlight-color: transparent; }
+  .ss-jump-btn:hover { background: rgba(255,255,255,0.16); }
+  .ss-jump-input-wrap { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
+  .ss-jump-input { background: rgba(255,255,255,0.07); border: none; color: #fff; font-family: 'DM Mono', monospace; font-size: 13px; width: 52px; height: 32px; padding: 0 8px; text-align: center; outline: none; -moz-appearance: textfield; }
+  .ss-jump-input::-webkit-outer-spin-button, .ss-jump-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .ss-jump-input::placeholder { color: rgba(255,255,255,0.25); }
+  .ss-jump-go { background: rgba(255,255,255,0.12); border: none; border-left: 1px solid rgba(255,255,255,0.15); color: #ccc; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; height: 32px; padding: 0 10px; cursor: pointer; transition: background 0.12s; }
+  .ss-jump-go:hover { background: rgba(255,255,255,0.24); }
+  .ss-speed { display: flex; align-items: center; gap: 6px; }
+  .ss-spd-btn { background: #222; color: #aaa; border: none; width: 30px; height: 30px; border-radius: 2px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .ss-spd-btn:hover { background: #333; color: #fff; }
+  #ssSpdLabel { font-family: 'DM Mono', monospace; font-size: 11px; color: #666; min-width: 36px; text-align: center; }
+
+  /* ── HAMBURGER ── */
+  header { position: relative; }
+  .hamburger { margin-left: auto; background: none; border: none; cursor: pointer; padding: 6px; display: flex; flex-direction: column; gap: 5px; -webkit-tap-highlight-color: transparent; }
+  .hamburger span { display: block; width: 22px; height: 2px; background: var(--ink); border-radius: 2px; transition: background 0.15s; }
+  .hamburger:hover span { background: var(--accent); }
+
+  /* ── SETTINGS DRAWER ── */
+  #settingsDrawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(400px, 95vw);
+    background: var(--paper);
+    border-left: 3px solid var(--border);
+    z-index: 3001;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+  }
+  #settingsDrawer.open { transform: translateX(0); }
+  .drw-header { background: var(--ink); color: var(--paper); padding: 16px 20px; font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .drw-close { background: none; border: none; color: var(--paper); font-size: 20px; cursor: pointer; opacity: 0.7; line-height: 1; }
+  .drw-close:hover { opacity: 1; }
+  .drw-section { padding: 20px; border-bottom: 1px solid var(--paper2); }
+  .drw-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #888; margin-bottom: 12px; }
+  .drw-presets { display: flex; flex-direction: column; gap: 8px; }
+  .preset-btn { background: white; border: 2px solid var(--border); border-radius: var(--radius); padding: 10px 14px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .preset-btn:hover { background: var(--ink); color: var(--paper); }
+  .drw-speed-input { width: 90px; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 16px; border: 2px solid var(--border); border-radius: var(--radius); background: white; color: var(--ink); outline: none; transition: border-color 0.15s; -moz-appearance: textfield; }
+  .drw-speed-input:focus { border-color: var(--accent); }
+  .drw-speed-input::-webkit-outer-spin-button, .drw-speed-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .img-send-zone { margin-top: 10px; }
+  #imgSendPreview { margin-top: 10px; padding: 12px; border: 2px solid var(--border); border-radius: var(--radius); background: white; }
+  .img-send-preview-inner { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+  .img-send-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 2px; border: 1px solid var(--paper2); flex-shrink: 0; }
+  .img-send-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .img-send-filename { font-family: "DM Mono", monospace; font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .img-send-stats { font-family: "DM Mono", monospace; font-size: 10px; color: #888; }
+  .img-send-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  .img-quality-row { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .img-quality-label { font-family: "DM Mono", monospace; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .img-compress-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--ink);
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .img-compress-btn:hover { background: var(--ink); color: var(--paper); }
+  .img-compress-btn.active { background: var(--ink); color: var(--paper); }
+  .drw-add-btn { display: block; width: 100%; margin-top: 10px; padding: 8px 0; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; background: none; border: 1.5px dashed #ccc; border-radius: var(--radius); cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .drw-add-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .drw-add-preset { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .drw-preset-name-input { width: 100%; padding: 9px 12px; font-family: 'DM Mono', monospace; font-size: 13px; border: 2px solid var(--border); border-radius: var(--radius); background: white; color: var(--ink); outline: none; box-sizing: border-box; transition: border-color 0.15s; }
+  .drw-preset-name-input:focus { border-color: var(--accent); }
+  .drw-add-preset-row { display: flex; gap: 8px; }
+  .preset-btn-custom { position: relative; }
+  .preset-btn-delete { position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,0.12); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .preset-btn-delete:hover { background: var(--accent); color: white; }
+  .preset-btn:hover .preset-sub { color: #aaa; }
+  .preset-name { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; }
+  .preset-sub { font-family: 'DM Mono', monospace; font-size: 11px; color: #888; }
+  #settingsDrawer input[type=range] { width: 100%; accent-color: var(--accent); }
+  .drw-hint { font-size: 11px; color: #aaa; margin-top: 10px; line-height: 1.5; }
+  canvas#qrCanvas { display: none; }
+
+  /* Protocol legend */
+  .protocol-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--paper2);
+    border-radius: var(--radius);
+    border: 1px solid #ddd;
+  }
+  .proto-chip {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid currentColor;
+  }
+  .proto-chip.text { color: var(--ink); background: white; }
+  .proto-chip.file { color: #2980b9; background: #eef6fc; }
+  .proto-chip.svg { color: var(--svg-purple); background: #f8f5ff; }
+  .proto-chip.pal { color: #16a085; background: #eafaf1; }
+  .proto-chip.grad { color: #8e44ad; background: #f9f0ff; }
+
+  /* ── NEW ENCODE MODES PANEL ── */
+  .encode-modes-section {
+    margin-top: 12px;
+    padding: 12px;
+    border: 2px solid #16a085;
+    border-radius: var(--radius);
+    background: #f0faf7;
+  }
+  .encode-modes-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #16a085;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .encode-tab-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .encode-tab {
+    flex: 1;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 8px 4px;
+    border: none;
+    cursor: pointer;
+    background: white;
+    color: #888;
+    transition: all 0.12s;
+    border-right: 1px solid var(--border);
+    -webkit-tap-highlight-color: transparent;
+    line-height: 1.3;
+    text-align: center;
+  }
+  .encode-tab:last-child { border-right: none; }
+  .encode-tab.active { background: var(--ink); color: var(--paper); }
+  .encode-tab-pane { display: none; }
+  .encode-tab-pane.active { display: block; }
+  .encode-opt-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .encode-progress { margin-top: 8px; display: none; }
+  .encode-progress.visible { display: block; }
+  .encode-progress-bar { height: 3px; background: #cef; border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
+  .encode-progress-fill { height: 100%; background: #16a085; border-radius: 2px; width: 0%; transition: width 0.2s; }
+  .encode-progress-label { font-family: 'DM Mono', monospace; font-size: 10px; color: #16a085; text-transform: uppercase; letter-spacing: 0.06em; }
+  .encode-preview-wrap { display: flex; gap: 10px; margin-top: 10px; align-items: flex-start; flex-wrap: wrap; }
+  .encode-thumb-box {
+    width: 90px; height: 90px;
+    border: 1px solid #ddd; border-radius: 2px;
+    overflow: hidden; background: white;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .encode-thumb-box canvas, .encode-thumb-box svg, .encode-thumb-box img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .encode-stats-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .encode-stat { font-family: 'DM Mono', monospace; font-size: 11px; color: #555; }
+  .encode-stat strong { color: #16a085; }
+  .encode-stat.win strong { color: var(--scan-green); }
+  .encode-stat.loss strong { color: var(--accent); }
+  .encode-desc { font-family: 'DM Mono', monospace; font-size: 10px; color: #aaa; line-height: 1.5; margin-top: 6px; }
+  .btn.teal { background: #16a085; border-color: #16a085; }
+  .btn.teal:hover { background: #0e7a65; border-color: #0e7a65; }
+  .btn.grape { background: #8e44ad; border-color: #8e44ad; }
+  .btn.grape:hover { background: #6c3483; border-color: #6c3483; }
+
+  /* Received re-render previews */
+  #paletteRecvBox, #gradRecvBox {
+    padding: 12px 16px; display: none; flex-direction: column; gap: 10px;
+  }
+  #paletteRecvBox.visible, #gradRecvBox.visible { display: flex; }
+  .recv-canvas-wrap { width: 100%; display: flex; justify-content: center; }
+  .recv-canvas-wrap canvas { max-width: 100%; max-height: 320px; border: 1px solid var(--paper2); border-radius: 2px; image-rendering: pixelated; }
+  .recv-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: #888; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>QR Chain</h1>
+  <span class="tagline">Sequential data via QR codes</span>
+  <button class="hamburger" onclick="openSettings()" aria-label="Settings">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('generate')">① Generate</button>
+  <button class="tab" onclick="switchTab('read')">② Read / Scan</button>
+  <button class="btn btn-broadcast" id="broadcastBtn" onclick="openSlideshow()" style="display:none">⬡ Broadcast</button>
+</div>
+
+<div id="generatePanel" class="panel active">
+
+  <!-- Drop zone 1: Parse PDF or Image → Text -->
+  <div id="pdfDropZone" class="pdf-drop-zone"
+       ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+    <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="handleFileSelect(event)">
+    <input type="file" id="imgFileInput" accept="image/*" style="display:none" onchange="handleImgSelect(event)">
+    <div class="pdf-drop-icon">⬡</div>
+    <div class="pdf-drop-label">Parse PDF or Image → Text</div>
+    <div class="pdf-drop-sub">Extracts readable text via PDF parsing or OCR</div>
+    <div style="margin-top:6px">
+      <span class="drop-type-btn" onclick="document.getElementById('pdfFileInput').click()">Browse PDF</span>
+      &nbsp;·&nbsp;
+      <span class="drop-type-btn" onclick="document.getElementById('imgFileInput').click()">Browse Image</span>
+    </div>
+  </div>
+
+  <div id="pdfActions" class="pdf-actions" style="display:none">
+    <span id="pdfFileName" class="pdf-file-name"></span>
+    <button class="pdf-action-btn reload" onclick="reloadPdf()">↺ Reload</button>
+    <button class="pdf-action-btn remove" onclick="removePdf()">✕ Remove</button>
+  </div>
+
+  <div id="pdfProgress" class="pdf-progress" style="display:none">
+    <div class="pdf-progress-bar"><div class="pdf-progress-fill" id="pdfProgressFill"></div></div>
+    <div class="pdf-progress-label" id="pdfProgressLabel">Reading PDF…</div>
+  </div>
+
+  <!-- Drop zone 2: Send Image File via QR -->
+  <div id="imgSendZone" class="pdf-drop-zone img-send-zone"
+       ondragover="handleImgSendDragOver(event)" ondragleave="handleImgSendDragLeave(event)"
+       ondrop="handleImgSendDrop(event)" onclick="document.getElementById('imgSendFileInput').click()">
+    <input type="file" id="imgSendFileInput" accept="image/*" style="display:none" onchange="handleImgSendSelect(event)">
+    <div class="pdf-drop-icon" style="opacity:0.35">▦</div>
+    <div class="pdf-drop-label">Send Image File via QR</div>
+    <div class="pdf-drop-sub">JPEG compress or vectorise to SVG — then encode as a QR chain<br>Receiver scans and downloads the file</div>
+  </div>
+
+  <div id="imgSendPreview" style="display:none">
+    <div class="img-send-preview-inner">
+      <img id="imgSendThumb" class="img-send-thumb">
+      <div class="img-send-meta">
+        <div id="imgSendName" class="img-send-filename"></div>
+        <div id="imgSendStats" class="img-send-stats"></div>
+        <div class="img-send-actions">
+          <button class="btn" onclick="encodeImageChain()">JPEG Chain</button>
+          <button class="btn secondary" onclick="clearImgSend()">✕ Remove</button>
+        </div>
+        <div class="img-quality-row">
+          <label class="img-quality-label">Quality <span id="imgQualityVal">80</span>%</label>
+          <input type="range" id="imgQuality" min="10" max="100" value="80" step="5" oninput="onSliderManual()">
+          <label class="img-quality-label">Max width <span id="imgMaxWVal">—</span>px</label>
+          <input type="range" id="imgMaxW" min="100" max="4000" value="1200" step="50" oninput="onSliderManual()">
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="img-compress-btn" id="compressBtn75" onclick="applyImgPreset(75)">75% quality + size</button>
+            <button class="img-compress-btn" id="compressBtn50" onclick="applyImgPreset(50)">50% quality + size</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ NEW: SVG VECTORISE SECTION ══ -->
+    <div class="svg-vectorise-section" id="svgVectoriseSection">
+      <div class="svg-section-title">
+        <span>◈</span>
+        <span>Vectorise → SVG Chain</span>
+        <span class="svg-badge visible" id="svgSizeBadge" style="opacity:0">—</span>
+      </div>
+
+      <div class="svg-mode-chips">
+        <div class="svg-mode-chip active" data-mode="colour" onclick="setSvgMode('colour')">Colour</div>
+        <div class="svg-mode-chip" data-mode="mono" onclick="setSvgMode('mono')">Mono / Line Art</div>
+        <div class="svg-mode-chip" data-mode="contour" onclick="setSvgMode('contour')">Contours</div>
+      </div>
+
+      <div class="svg-options-row">
+        <div>
+          <div class="svg-opt-label">
+            <span>Colours <span id="svgColourCountLabel">8</span></span>
+            <span style="color:#aaa;font-size:9px">fewer = smaller SVG</span>
+          </div>
+          <input type="range" id="svgColours" min="2" max="32" value="8" step="1"
+                 style="accent-color:var(--svg-purple);width:100%"
+                 oninput="document.getElementById('svgColourCountLabel').textContent=this.value; scheduleSvgPreview()">
+        </div>
+        <div>
+          <div class="svg-opt-label">
+            <span>Detail <span id="svgDetailLabel">50</span></span>
+            <span style="color:#aaa;font-size:9px">less = fewer paths</span>
+          </div>
+          <input type="range" id="svgDetail" min="5" max="100" value="50" step="5"
+                 style="accent-color:var(--svg-purple);width:100%"
+                 oninput="document.getElementById('svgDetailLabel').textContent=this.value; scheduleSvgPreview()">
+        </div>
+      </div>
+
+      <!-- SVG progress -->
+      <div class="svg-progress" id="svgProgress">
+        <div class="svg-progress-bar"><div class="svg-progress-fill" id="svgProgressFill"></div></div>
+        <div class="svg-progress-label" id="svgProgressLabel">Vectorising…</div>
+      </div>
+
+      <!-- SVG preview -->
+      <div class="svg-preview-wrap" id="svgPreviewWrap" style="display:none">
+        <div class="svg-thumb-box" id="svgThumbBox"></div>
+        <div class="svg-stats-wrap" id="svgStatsWrap">
+          <div class="svg-stat">Size: <strong id="svgStatSize">—</strong></div>
+          <div class="svg-stat">Paths: <strong id="svgStatPaths">—</strong></div>
+          <div class="svg-stat">QR codes: <strong id="svgStatCodes">—</strong></div>
+          <div class="svg-stat">vs JPEG: <strong id="svgStatVsJpeg">—</strong></div>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn purple" onclick="vectoriseAndEncode()" id="svgEncodeBtn">Vectorise &amp; Generate Chain</button>
+        <button class="btn secondary" onclick="scheduleSvgPreview()" style="font-size:11px;padding:8px 12px">↺ Preview</button>
+      </div>
+      <p style="font-family:'DM Mono',monospace;font-size:10px;color:#aaa;margin-top:8px;line-height:1.5">
+        SVG = infinite resolution, no blur when zoomed. Best for logos, diagrams, illustrations, screenshots.
+        Photos will be larger than JPEG. SVG data is gzip-compressed before chunking.
+      </p>
+    </div>
+
+    <!-- ══ NEW: METADATA RE-RENDER SECTION ══ -->
+    <div class="encode-modes-section" id="encodeModesSection">
+      <div class="encode-modes-title">
+        <span>◉</span>
+        <span>Metadata Re-render Protocols</span>
+        <span style="font-size:9px;color:#aaa;font-family:'DM Mono',monospace;margin-left:4px">— fewest QR codes possible</span>
+      </div>
+
+      <div class="encode-tab-row">
+        <button class="encode-tab active" onclick="switchEncodeTab('palette')" id="etab-palette">
+          🎨 Palette<br><span style="font-size:8px;opacity:0.7">Indexed bitmap</span>
+        </button>
+        <button class="encode-tab" onclick="switchEncodeTab('gradient')" id="etab-gradient">
+          🌅 Gradient<br><span style="font-size:8px;opacity:0.7">Mesh relight</span>
+        </button>
+        <button class="encode-tab" onclick="switchEncodeTab('dct')" id="etab-dct">
+          📐 DCT<br><span style="font-size:8px;opacity:0.7">JPEG reimagined</span>
+        </button>
+      </div>
+
+      <!-- PALETTE PANE -->
+      <div class="encode-tab-pane active" id="epane-palette">
+        <div class="encode-desc">
+          Quantise image to N colours → send palette + Z85-encoded indexed bitmap.
+          Receiver re-renders at full resolution using the palette. ~50–80% fewer codes than JPEG for flat art.
+        </div>
+        <div style="margin-top:8px">
+          <div class="encode-opt-label">
+            <span>Colours <span id="palColVal">16</span></span>
+            <span style="color:#aaa;font-size:9px">2–64</span>
+          </div>
+          <input type="range" id="palColours" min="2" max="64" value="16" step="1"
+                 style="accent-color:#16a085;width:100%"
+                 oninput="document.getElementById('palColVal').textContent=this.value; schedulePalPreview()">
+          <div class="encode-opt-label" style="margin-top:6px">
+            <span>Render size <span id="palSizeVal">200</span>px</span>
+            <span style="color:#aaa;font-size:9px">width of sent bitmap</span>
+          </div>
+          <input type="range" id="palSize" min="20" max="600" value="200" step="10"
+                 style="accent-color:#16a085;width:100%"
+                 oninput="document.getElementById('palSizeVal').textContent=this.value; schedulePalPreview()">
+          <div class="encode-opt-label" style="margin-top:6px">
+            <span>Dither</span>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div class="svg-mode-chip active" data-dither="none" onclick="setDitherMode('none')" style="border-color:#b0e0d4;color:#16a085">None</div>
+            <div class="svg-mode-chip" data-dither="ordered" onclick="setDitherMode('ordered')" style="border-color:#b0e0d4;color:#16a085">Ordered</div>
+            <div class="svg-mode-chip" data-dither="floyd" onclick="setDitherMode('floyd')" style="border-color:#b0e0d4;color:#16a085">Floyd-Steinberg</div>
+          </div>
+        </div>
+        <div class="encode-progress" id="palProgress">
+          <div class="encode-progress-bar"><div class="encode-progress-fill" id="palProgressFill"></div></div>
+          <div class="encode-progress-label" id="palProgressLabel">Processing…</div>
+        </div>
+        <div class="encode-preview-wrap" id="palPreviewWrap" style="display:none">
+          <div class="encode-thumb-box"><canvas id="palThumbCanvas"></canvas></div>
+          <div class="encode-stats-wrap" id="palStatsWrap">
+            <div class="encode-stat">QR codes: <strong id="palStatCodes">—</strong></div>
+            <div class="encode-stat">Payload: <strong id="palStatSize">—</strong></div>
+            <div class="encode-stat" id="palStatComp">vs JPEG: <strong>—</strong></div>
+            <div class="encode-stat">Colours: <strong id="palStatCols">—</strong></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn teal" onclick="encodePaletteChain()" id="palEncodeBtn">Generate Palette Chain</button>
+          <button class="btn secondary" onclick="schedulePalPreview()" style="font-size:11px;padding:8px 12px">↺ Preview</button>
+        </div>
+      </div>
+
+      <!-- GRADIENT MESH PANE -->
+      <div class="encode-tab-pane" id="epane-gradient">
+        <div class="encode-desc">
+          Sample a sparse grid of colours → send as compact metadata. Receiver bicubic-interpolates to reconstruct.
+          Lossy but beautiful for portraits, landscapes. Typically 10–30 codes for any image size.
+        </div>
+        <div style="margin-top:8px">
+          <div class="encode-opt-label">
+            <span>Grid density <span id="gradGridVal">8</span>×<span id="gradGridVal2">8</span></span>
+            <span style="color:#aaa;font-size:9px">sample points</span>
+          </div>
+          <input type="range" id="gradGrid" min="3" max="24" value="8" step="1"
+                 style="accent-color:#8e44ad;width:100%"
+                 oninput="document.getElementById('gradGridVal').textContent=this.value;document.getElementById('gradGridVal2').textContent=this.value; scheduleGradPreview()">
+          <div class="encode-opt-label" style="margin-top:6px">
+            <span>Output resolution <span id="gradResVal">400</span>px</span>
+          </div>
+          <input type="range" id="gradRes" min="100" max="1200" value="400" step="50"
+                 style="accent-color:#8e44ad;width:100%"
+                 oninput="document.getElementById('gradResVal').textContent=this.value">
+        </div>
+        <div class="encode-progress" id="gradProgress">
+          <div class="encode-progress-bar" style="background:#e8d8f8"><div class="encode-progress-fill" id="gradProgressFill" style="background:#8e44ad"></div></div>
+          <div class="encode-progress-label" id="gradProgressLabel" style="color:#8e44ad">Processing…</div>
+        </div>
+        <div class="encode-preview-wrap" id="gradPreviewWrap" style="display:none">
+          <div class="encode-thumb-box"><canvas id="gradThumbCanvas"></canvas></div>
+          <div class="encode-stats-wrap">
+            <div class="encode-stat">QR codes: <strong id="gradStatCodes">—</strong></div>
+            <div class="encode-stat">Payload: <strong id="gradStatSize">—</strong></div>
+            <div class="encode-stat">Grid pts: <strong id="gradStatPts">—</strong></div>
+            <div class="encode-desc" id="gradStatNote"></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn grape" onclick="encodeGradientChain()" id="gradEncodeBtn">Generate Gradient Chain</button>
+          <button class="btn secondary" onclick="scheduleGradPreview()" style="font-size:11px;padding:8px 12px">↺ Preview</button>
+        </div>
+      </div>
+
+      <!-- DCT PANE -->
+      <div class="encode-tab-pane" id="epane-dct">
+        <div class="encode-desc">
+          Applies an 8×8 DCT (like JPEG) but encodes coefficients with Z85 instead of base64 — ~20% more efficient.
+          Also skips JFIF headers. Good middle ground: better than JPEG QR chain for photographic images.
+        </div>
+        <div style="margin-top:8px">
+          <div class="encode-opt-label">
+            <span>Quality <span id="dctQualVal">70</span>%</span>
+          </div>
+          <input type="range" id="dctQual" min="5" max="95" value="70" step="5"
+                 style="accent-color:#c0392b;width:100%"
+                 oninput="document.getElementById('dctQualVal').textContent=this.value; scheduleDctPreview()">
+          <div class="encode-opt-label" style="margin-top:6px">
+            <span>Scale <span id="dctScaleVal">100</span>%</span>
+          </div>
+          <input type="range" id="dctScale" min="10" max="100" value="100" step="5"
+                 style="accent-color:#c0392b;width:100%"
+                 oninput="document.getElementById('dctScaleVal').textContent=this.value; scheduleDctPreview()">
+        </div>
+        <div class="encode-progress" id="dctProgress">
+          <div class="encode-progress-bar" style="background:#f5e0de"><div class="encode-progress-fill" id="dctProgressFill" style="background:#c0392b"></div></div>
+          <div class="encode-progress-label" id="dctProgressLabel" style="color:#c0392b">Processing…</div>
+        </div>
+        <div class="encode-preview-wrap" id="dctPreviewWrap" style="display:none">
+          <div class="encode-thumb-box"><canvas id="dctThumbCanvas"></canvas></div>
+          <div class="encode-stats-wrap">
+            <div class="encode-stat">QR codes: <strong id="dctStatCodes">—</strong></div>
+            <div class="encode-stat">Payload: <strong id="dctStatSize">—</strong></div>
+            <div class="encode-stat" id="dctStatComp">vs JPEG QR: <strong>—</strong></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" style="background:#c0392b;border-color:#c0392b" onclick="encodeDctChain()" id="dctEncodeBtn">Generate DCT Chain</button>
+          <button class="btn secondary" onclick="scheduleDctPreview()" style="font-size:11px;padding:8px 12px">↺ Preview</button>
+        </div>
+      </div>
+
+    </div><!-- end encode-modes-section -->
+
+  </div><!-- end imgSendPreview -->
+
+  <textarea id="textInput" placeholder="Paste any text here — it will be split across multiple QR codes automatically…" style="height:220px"></textarea>
+
+  <div class="controls-row">
+    <button class="btn" onclick="generateChain()">Generate Chain</button>
+    <button class="btn secondary" onclick="clearGen()">Clear</button>
+    <span class="compression-badge" id="compressionBadge">— saved</span>
+  </div>
+
+  <!-- Protocol legend -->
+  <div class="protocol-legend">
+    <span style="font-family:'DM Mono',monospace;font-size:10px;color:#aaa;width:100%;margin-bottom:2px">PROTOCOLS:</span>
+    <span class="proto-chip text">QRC| — text (deflate-compressed)</span>
+    <span class="proto-chip file">QRF| — image/file (JPEG base64)</span>
+    <span class="proto-chip svg">QRS| — vector SVG (gzip+base64)</span>
+    <span class="proto-chip pal">QRP| — palette re-render (indexed bitmap)</span>
+    <span class="proto-chip grad">QRG| — gradient mesh re-render</span>
+    <span class="proto-chip" style="color:#c0392b;background:#fef0ee">QRD| — DCT/Z85 (efficient photo)</span>
+  </div>
+
+  <div id="qrSequence" style="display:none">
+    <div class="seq-header">
+      <span class="seq-title">QR Sequence</span>
+      <span class="seq-count" id="seqCount"></span>
+    </div>
+    <div class="page-nav" id="pageNav" style="display:none">
+      <button class="page-btn" id="pagePrev" onclick="changePage(-1)">← Prev</button>
+      <div class="page-stack" id="pageStack"></div>
+      <button class="page-btn" id="pageNext" onclick="changePage(1)">Next →</button>
+    </div>
+    <div class="qr-cards" id="qrCards"></div>
+    <div class="print-btn-row">
+      <button class="btn secondary" onclick="window.print()">🖨 Print all codes</button>
+    </div>
+  </div>
+</div>
+
+<div id="readPanel" class="panel">
+  <div class="read-layout">
+    <div class="read-controls">
+      <button class="btn" id="startCamBtn" onclick="startCamera()">Start Camera</button>
+      <button class="btn secondary" onclick="resetReader()">Reset Text</button>
+    </div>
+
+    <div class="scanner-box" id="scannerBox">
+      <div class="camera-start" id="cameraStart">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <p>Press "Start Camera" to begin scanning QR codes.<br>Allow camera access when prompted.</p>
+      </div>
+      <div id="reader" style="display:none"></div>
+      <div class="scanner-status" id="scanStatus" style="display:none">Align QR code in frame</div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="tl-wrap" id="tlWrap" style="display:none">
+      <div class="tl-topbar">
+        <span class="tl-title">QR Timeline</span>
+        <span class="tl-stats" id="tlStats"></span>
+        <span class="tl-missing-badge" id="tlMissBadge" style="display:none"></span>
+      </div>
+      <div class="tl-strip-wrap">
+        <div class="tl-strip" id="tlStrip"></div>
+      </div>
+      <div class="tl-missing-summary" id="tlMissingSummary">
+        <div class="tl-missing-label">Missing frames — tap to jump</div>
+        <div class="tl-missing-chips" id="tlMissingChips"></div>
+      </div>
+      <div class="tl-hint" id="tlHint" style="display:none">
+        <span class="tl-hint-icon">↑</span>
+        <span id="tlHintText">Jump to frame … on the sender</span>
+        <button class="tl-hint-dismiss" onclick="document.getElementById('tlHint').style.display='none'">✕</button>
+      </div>
+    </div>
+
+    <div class="text-output-box">
+      <div class="text-output-header">
+        <span id="outputLabel">Accumulated Text</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="copy-btn" onclick="copyText()" id="copyBtn">Copy</button>
+          <span class="progress-pill" id="progressPill">0 scanned</span>
+        </div>
+      </div>
+      <div id="accumulatedText">Scan QR codes in order — text will appear here…</div>
+
+      <!-- SVG preview panel inside reader -->
+      <div id="svgPreviewBox">
+        <div class="svg-preview-meta" id="svgPreviewMeta">Scanning SVG chain…</div>
+        <div id="svgPreviewContainer"></div>
+      </div>
+
+      <!-- Palette re-render receive -->
+      <div id="paletteRecvBox">
+        <div class="recv-meta" id="paletteRecvMeta">Scanning palette chain…</div>
+        <div class="recv-canvas-wrap"><canvas id="paletteRecvCanvas"></canvas></div>
+      </div>
+
+      <!-- Gradient mesh receive -->
+      <div id="gradRecvBox">
+        <div class="recv-meta" id="gradRecvMeta">Scanning gradient chain…</div>
+        <div class="recv-canvas-wrap"><canvas id="gradRecvCanvas"></canvas></div>
+      </div>
+
+      <!-- DCT receive -->
+      <div id="dctRecvBox" style="display:none;padding:12px 16px">
+        <div class="recv-meta" id="dctRecvMeta">Scanning DCT chain…</div>
+        <div class="recv-canvas-wrap"><canvas id="dctRecvCanvas"></canvas></div>
+      </div>
+
+      <div id="fileDownloadBox" class="file-download-box" style="display:none">
+        <div class="file-download-icon" id="fileDownloadIcon">🖼</div>
+        <div class="file-download-info">
+          <div class="file-download-name" id="fileDownloadName">image.png</div>
+          <div class="file-download-sub" id="fileDownloadSub"></div>
+        </div>
+        <button class="file-download-btn" id="fileDownloadBtn" onclick="downloadReceivedFile()">⬇ Download</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Text preview modal -->
+<div class="modal-backdrop" id="textModal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="modalTitle">Code 1 of 1</span>
+      <button class="modal-close" onclick="document.getElementById('textModal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Slideshow overlay -->
+<div id="slideshow" style="display:none" onclick="ssTapToStart()">
+  <div class="ss-top">
+    <div class="ss-top-left">
+      <span id="ssLabel">BROADCAST</span>
+      <span class="ss-loop-tag" id="ssLoopTag">LOOP 2</span>
+    </div>
+    <span id="ssFrameCounter" style="font-family:'DM Mono',monospace;font-size:12px;color:#666;letter-spacing:0.08em;"></span>
+    <button class="ss-close" onclick="closeSlideshow()">✕ Exit</button>
+  </div>
+  <div class="ss-main">
+    <div class="ss-qr-wrap">
+      <img id="ssQrImg" src="" alt="QR">
+    </div>
+    <div id="ssTapOverlay" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;">
+      <div style="font-family:'DM Mono',monospace;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.45);background:rgba(0,0,0,0.55);padding:12px 24px;border-radius:4px;border:1px solid rgba(255,255,255,0.15);">Tap anywhere to start</div>
+    </div>
+  </div>
+  <div class="ss-bottom" onclick="event.stopPropagation()">
+    <div class="ss-progress-track" onclick="handleProgressClick(event)" title="Click to jump">
+      <div class="ss-progress-bar" id="ssProgressBar"></div>
+    </div>
+    <div class="ss-controls-row">
+      <div class="ss-jump">
+        <button class="ss-jump-btn" onclick="jumpFirst()">⏮</button>
+        <button class="ss-jump-btn" onclick="jumpPrev()">◀</button>
+        <button class="ss-jump-btn" id="ssPlayPause" onclick="togglePlay()">⏸</button>
+        <button class="ss-jump-btn" onclick="jumpNext()">▶</button>
+        <button class="ss-jump-btn" onclick="jumpLast()">⏭</button>
+        <div class="ss-jump-input-wrap">
+          <input type="number" id="ssJumpInput" class="ss-jump-input" min="1" placeholder="…"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();jumpTo();}"
+                 oninput="this.value=this.value.replace(/[^0-9]/g,''); if(this.value.length>=2) jumpTo();"
+                 onclick="event.stopPropagation()">
+        </div>
+      </div>
+      <div class="ss-speed">
+        <button class="ss-spd-btn" onclick="adjustSpeed(-200)">−</button>
+        <span id="ssSpdLabel">0.16s</span>
+        <button class="ss-spd-btn" onclick="adjustSpeed(200)">+</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings drawer -->
+<div id="settingsBackdrop" onclick="closeSettings()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;"></div>
+<div id="settingsDrawer">
+  <div class="drw-header">
+    <span>Settings</span>
+    <button class="drw-close" onclick="closeSettings()">✕</button>
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Presets</div>
+    <div class="drw-presets" id="presetList">
+      <button class="preset-btn" onclick="applyPreset(250, 200)">
+        <span class="preset-name">Balanced</span>
+        <span class="preset-sub">0.2s · 250 chars</span>
+      </button>
+    </div>
+    <div class="drw-add-preset" id="addPresetForm" style="display:none">
+      <input type="text" id="newPresetName" class="drw-preset-name-input" placeholder="Preset name…" maxlength="24">
+      <div class="drw-add-preset-row">
+        <button class="btn" style="flex:1" onclick="saveCustomPreset()">Save</button>
+        <button class="btn secondary" onclick="cancelAddPreset()">Cancel</button>
+      </div>
+    </div>
+    <button class="drw-add-btn" id="addPresetBtn" onclick="showAddPreset()">+ Save current as preset</button>
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Chunk Size — <span id="drwChunkVal">500</span> chars <span style="font-size:10px;color:#aaa" id="drwChunkHint">(good)</span></div>
+    <input type="range" id="drwChunk" min="40" max="2000" value="500" step="10" oninput="syncChunk(this.value)">
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Broadcast Speed (seconds per code)</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="number" id="drwSpeed" class="drw-speed-input" min="0.05" max="10" step="0.01" value="0.16"
+             oninput="syncSpeedInput(this.value)" onblur="clampSpeedInput()">
+      <span style="font-family:'DM Mono',monospace;font-size:12px;color:#888">s</span>
+    </div>
+  </div>
+  <div class="drw-section">
+    <div class="drw-label">Compression</div>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <input type="checkbox" id="useDeflate" checked style="accent-color:var(--accent);width:16px;height:16px">
+      <span style="font-family:'DM Mono',monospace;font-size:12px">Deflate compress text (pako)</span>
+    </label>
+    <p class="drw-hint">Compresses text ~40–70% before chunking. Text only — doesn't apply to image transfers. JPEG is already compressed; use the quality/size sliders instead.</p>
+  </div>
+  <div class="drw-section">
+    <button class="btn" style="width:100%" onclick="saveDefaults()">Save as Default</button>
+    <p class="drw-hint">Saved defaults load automatically on next visit.</p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  PAKO (deflate/gzip) — lazy-loaded on first use
+// ═══════════════════════════════════════════════════════════
+let pakoLib = null;
+
+async function ensurePako() {
+  if (pakoLib) return pakoLib;
+  const mod = await import('https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.esm.mjs');
+  pakoLib = mod.default || mod;
+  return pakoLib;
+}
+
+// base64url (no padding, URL-safe)
+function toB64url(uint8arr) {
+  let bin = '';
+  for (let i = 0; i < uint8arr.length; i++) bin += String.fromCharCode(uint8arr[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromB64url(str) {
+  const padded = str.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(padded);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+async function compressText(text) {
+  const pako = await ensurePako();
+  const bytes = new TextEncoder().encode(text);
+  const compressed = pako.deflate(bytes, { level: 9 });
+  return toB64url(compressed);
+}
+
+async function decompressText(b64url) {
+  const pako = await ensurePako();
+  const compressed = fromB64url(b64url);
+  const bytes = pako.inflate(compressed);
+  return new TextDecoder().decode(bytes);
+}
+
+// Gzip an SVG string → base64url
+async function gzipSvg(svgString) {
+  const pako = await ensurePako();
+  const bytes = new TextEncoder().encode(svgString);
+  const compressed = pako.gzip(bytes, { level: 9 });
+  return toB64url(compressed);
+}
+
+// Gunzip base64url → SVG string
+async function gunzipSvg(b64url) {
+  const pako = await ensurePako();
+  const compressed = fromB64url(b64url);
+  const bytes = pako.ungzip(compressed);
+  return new TextDecoder().decode(bytes);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((b, i) =>
+    b.classList.toggle('active', (i === 0 && t === 'generate') || (i === 1 && t === 'read'))
+  );
+  document.getElementById('generatePanel').classList.toggle('active', t === 'generate');
+  document.getElementById('readPanel').classList.toggle('active', t === 'read');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LOCALSTORAGE
+// ═══════════════════════════════════════════════════════════
+const textInput = document.getElementById('textInput');
+const STORAGE_KEY = 'qrchain-text';
+
+try {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) textInput.value = saved;
+} catch(e) {}
+
+textInput.addEventListener('input', () => {
+  try { localStorage.setItem(STORAGE_KEY, textInput.value); } catch(e) {}
+});
+
+// ═══════════════════════════════════════════════════════════
+//  OPT 4: WHITESPACE COLLAPSE
+// ═══════════════════════════════════════════════════════════
+function collapseWhitespace(text) {
+  return text
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+
+function chunkText(text, size) {
+  const chunks = [];
+  let i = 0;
+  while (i < text.length) {
+    let end = i + size;
+    if (end < text.length) {
+      const spaceBack = text.lastIndexOf(' ', end);
+      if (spaceBack > i) end = spaceBack;
+    }
+    chunks.push(text.slice(i, end).trim());
+    i = (end < text.length && text[end] === ' ') ? end + 1 : end;
+  }
+  return chunks.filter(Boolean);
+}
+
+function encodeChunk(index, total, payload, compressed) {
+  const compFlag = compressed ? 'Z' : '';
+  if (index === 1) return `QRC|${index}/${total}${compFlag}|${payload}`;
+  return `QRC|${index}|${payload}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GENERATE TEXT CHAIN
+// ═══════════════════════════════════════════════════════════
+const PAGE_SIZE = 50;
+let allChunks  = [];
+let currentPage = 0;
+
+async function generateChain() {
+  const raw = document.getElementById('textInput').value.trim();
+  if (!raw) { showToast('Paste some text first'); return; }
+
+  const size = parseInt(document.getElementById('drwChunk').value) || 500;
+  const useDeflate = document.getElementById('useDeflate').checked;
+  const badge = document.getElementById('compressionBadge');
+
+  const collapsed = collapseWhitespace(raw);
+  const collapsedLen = collapsed.length;
+
+  let textToChunk = collapsed;
+  let compressed  = false;
+
+  const looksLikeBinaryB64 = collapsed.length > 500 &&
+    (collapsed.match(/[A-Za-z0-9+/=]{200,}/g) || []).join('').length > collapsed.length * 0.6;
+
+  if (useDeflate && !looksLikeBinaryB64 && collapsed.length > 200) {
+    try {
+      const deflated = await compressText(collapsed);
+      if (deflated.length < collapsed.length * 0.95) {
+        textToChunk = deflated;
+        compressed = true;
+      }
+    } catch(e) {
+      console.warn('Deflate failed:', e);
+    }
+  }
+
+  const chunks = chunkText(textToChunk, size);
+  const total  = chunks.length;
+
+  allChunks = chunks.map((chunk, idx) =>
+    encodeChunk(idx + 1, total, chunk, compressed && idx === 0)
+  );
+
+  currentPage = 0;
+  ssChunks    = allChunks;
+  currentChainType = 'text';
+
+  const origCodes  = Math.ceil(collapsedLen / size);
+  const savedCodes = origCodes - total;
+  const savedPct   = Math.round((1 - total / origCodes) * 100);
+
+  if (compressed && savedCodes > 0) {
+    badge.textContent = `↓${savedPct}% — ${savedCodes} fewer code${savedCodes > 1 ? 's' : ''}`;
+    badge.classList.add('visible');
+  } else if (collapsedLen < raw.length) {
+    const charsSaved = raw.length - collapsedLen;
+    badge.textContent = `↓${charsSaved} chars (whitespace)`;
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
+
+  document.getElementById('seqCount').textContent = `${total} code${total > 1 ? 's' : ''}`;
+  document.getElementById('qrSequence').style.display = 'block';
+  document.getElementById('broadcastBtn').style.display = 'flex';
+
+  renderPage(0);
+  showToast(`${total} QR codes generated`, true);
+}
+
+function renderPage(page, isSvgChain) {
+  currentPage = page;
+  const total      = allChunks.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const start      = page * PAGE_SIZE;
+  const end        = Math.min(start + PAGE_SIZE, total);
+  const container  = document.getElementById('qrCards');
+  container.innerHTML = '';
+
+  const pageNav = document.getElementById('pageNav');
+  pageNav.style.display = totalPages > 1 ? 'flex' : 'none';
+
+  if (totalPages > 1) {
+    const stack = document.getElementById('pageStack');
+    stack.innerHTML = '';
+    for (let p = 0; p < totalPages; p++) {
+      const wrap = document.createElement('div');
+      wrap.className = 'page-pip-wrap';
+      wrap.onclick = () => renderPage(p, isSvgChain);
+      const pip = document.createElement('div');
+      pip.className = 'page-pip' + (p === page ? ' active' : '');
+      pip.textContent = p + 1;
+      const lbl = document.createElement('div');
+      lbl.className = 'page-pip-label';
+      lbl.textContent = `${p * PAGE_SIZE + 1}–${Math.min((p + 1) * PAGE_SIZE, total)}`;
+      wrap.appendChild(pip);
+      wrap.appendChild(lbl);
+      stack.appendChild(wrap);
+    }
+    document.getElementById('pagePrev').disabled = page === 0;
+    document.getElementById('pageNext').disabled = page === totalPages - 1;
+  }
+
+  for (let idx = start; idx < end; idx++) {
+    const payload = allChunks[idx];
+    const card    = document.createElement('div');
+    card.className = 'qr-card';
+    card.style.animationDelay = ((idx - start) * 20) + 'ms';
+
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
+
+    const previewText = payload.split('|').slice(2).join('|');
+    const headerClass = isSvgChain ? 'qr-card-header svg-header' : 'qr-card-header';
+    const typeLabel   = isSvgChain ? '◈SVG' : '';
+
+    card.innerHTML = `
+      <div class="${headerClass}">
+        <span>Code ${idx+1} of ${total}</span>
+        <span>${idx === total-1 ? 'LAST' : typeLabel}</span>
+      </div>
+      <img src="${qrUrl}" alt="QR ${idx+1}" loading="lazy">
+      <div class="qr-card-preview">${previewText.slice(0,60)}${previewText.length > 60 ? '…' : ''}</div>
+    `;
+    card.addEventListener('click', () => openModal(idx+1, total, previewText));
+    container.appendChild(card);
+  }
+}
+
+function changePage(dir) {
+  const totalPages = Math.ceil(allChunks.length / PAGE_SIZE);
+  const next = currentPage + dir;
+  if (next >= 0 && next < totalPages) {
+    renderPage(next, currentChainType === 'svg');
+    document.getElementById('qrSequence').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+let currentChainType = 'text';
+
+function clearGen() {
+  document.getElementById('textInput').value = '';
+  document.getElementById('qrSequence').style.display = 'none';
+  document.getElementById('qrCards').innerHTML = '';
+  document.getElementById('broadcastBtn').style.display = 'none';
+  document.getElementById('compressionBadge').classList.remove('visible');
+  allChunks = []; ssChunks = []; currentPage = 0; currentChainType = 'text';
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  READ / SCAN
+// ═══════════════════════════════════════════════════════════
+let cameraStarted = false;
+let qrScanner     = null;
+let scannedChunks = {};
+let totalChunks   = null;
+let lastScanned   = null;
+let isCompressed  = false;
+let isSvgChain    = false;   // NEW: true when receiving QRS| chain
+
+async function startCamera() {
+  const readerEl = document.getElementById('reader');
+  readerEl.style.display = 'block';
+  document.getElementById('cameraStart').style.display = 'none';
+  document.getElementById('scanStatus').style.display = 'block';
+  document.getElementById('startCamBtn').textContent = 'Camera On';
+  document.getElementById('startCamBtn').disabled = true;
+  cameraStarted = true;
+
+  try {
+    const { default: QrScanner } = await import('https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js');
+    const video = document.createElement('video');
+    readerEl.appendChild(video);
+
+    qrScanner = new QrScanner(
+      video,
+      result => processQR(result.data),
+      {
+        onDecodeError: () => {},
+        preferredCamera: 'environment',
+        highlightScanRegion: true,
+        highlightCodeOutline: false,
+        returnDetailedScanResult: true,
+        calculateScanRegion: (v) => {
+          const s = Math.round(Math.min(v.videoWidth, v.videoHeight) * 0.7);
+          const x = Math.round((v.videoWidth  - s) / 2);
+          const y = Math.round((v.videoHeight - s) / 2);
+          return { x, y, width: s, height: s, downScaledWidth: 400, downScaledHeight: 400 };
+        },
+      }
+    );
+
+    await qrScanner.start();
+    setStatus('Camera running — point at a QR code');
+  } catch(e) {
+    showToast('Camera access denied');
+    console.error(e);
+    document.getElementById('startCamBtn').disabled = false;
+    document.getElementById('startCamBtn').textContent = 'Camera On';
+    cameraStarted = false;
+    document.getElementById('cameraStart').style.display = 'flex';
+    document.getElementById('reader').style.display = 'none';
+  }
+}
+
+async function processQR(data) {
+  // Route to correct handler by protocol prefix
+  if (data.startsWith('QRF|')) { processFileQR(data); return; }
+  if (data.startsWith('QRS|')) { processSvgQR(data); return; }   // NEW
+  if (!data.startsWith('QRC|')) return;
+
+  const parts = data.split('|');
+  if (parts.length < 3) return;
+
+  const meta    = parts[1];
+  const payload = parts.slice(2).join('|');
+
+  let idx, total, compressedFlag = false;
+
+  if (meta.includes('/')) {
+    const metaClean = meta.replace(/Z$/, '');
+    compressedFlag = meta.endsWith('Z');
+    const [idxStr, totStr] = metaClean.split('/');
+    idx   = parseInt(idxStr);
+    total = parseInt(totStr);
+    if (idx === 1) {
+      totalChunks  = total;
+      isCompressed = compressedFlag;
+      isSvgChain   = false;
+    }
+  } else {
+    idx   = parseInt(meta);
+    total = totalChunks;
+  }
+
+  if (isNaN(idx) || !total) return;
+  if (scannedChunks[idx]) {
+    if (lastScanned !== idx) {
+      lastScanned = idx;
+      setStatus(`Code ${idx}/${total} already scanned`);
+    }
+    return;
+  }
+
+  lastScanned = idx;
+  scannedChunks[idx] = payload;
+
+  setTimeout(async () => {
+    await updateTextDisplay();
+    updateTimeline(total, false);
+
+    const now = Date.now();
+    if (!processQR._lastToast || now - processQR._lastToast > 600) {
+      showToast(`Code ${idx}/${total} scanned`, true);
+      processQR._lastToast = now;
+    }
+    const gotCount = Object.keys(scannedChunks).length;
+    setStatus(`✓ Got code ${idx}/${total}. ${gotCount < total ? 'Scan next…' : 'Complete!'}`);
+    if (gotCount === total) {
+      showToast(`All ${total} codes scanned ✓`, true);
+      setStatus('✓ All codes scanned — text complete!');
+    }
+  }, 0);
+}
+
+// ── NEW: SVG chain receiver ──
+let svgChunks = {};
+
+async function processSvgQR(data) {
+  const parts = data.split('|');
+  if (parts.length < 3) return;
+  const meta    = parts[1];
+  const payload = parts.slice(2).join('|');
+
+  if (!meta.includes('/')) return;
+  const [idxStr, totStr] = meta.split('/');
+  const idx   = parseInt(idxStr);
+  const total = parseInt(totStr);
+  if (isNaN(idx) || isNaN(total)) return;
+
+  if (idx === 1) {
+    totalChunks = total;
+    isSvgChain  = true;
+    // Update UI label
+    document.getElementById('outputLabel').textContent = 'Received SVG';
+  }
+
+  if (svgChunks[idx]) return;
+  svgChunks[idx]     = payload;
+  scannedChunks[idx] = true;  // mirror to timeline
+
+  showToast(`SVG chunk ${idx}/${total}`, true);
+  setStatus(Object.keys(svgChunks).length === total ? '✓ SVG complete!' : `SVG scan… ${Object.keys(svgChunks).length}/${total}`);
+  updateTimeline(total, true);
+
+  const got = Object.keys(svgChunks).length;
+  const pill = document.getElementById('progressPill');
+  pill.textContent = `${got}/${total} SVG`;
+  pill.className = 'progress-pill' + (got === total ? ' done' : '');
+
+  // Update progress text
+  document.getElementById('accumulatedText').textContent =
+    got === total ? '' : `Scanning SVG chain… ${got}/${total} chunks`;
+
+  if (got === total) assembleSvg(total);
+}
+
+async function assembleSvg(total) {
+  const combined = Array.from({length: total}, (_, i) => svgChunks[i + 1] || '').join('');
+
+  let svgString;
+  try {
+    svgString = await gunzipSvg(combined);
+  } catch(e) {
+    showToast('SVG decompress failed');
+    console.error(e);
+    return;
+  }
+
+  // Render preview
+  const previewBox = document.getElementById('svgPreviewBox');
+  const container  = document.getElementById('svgPreviewContainer');
+  const meta       = document.getElementById('svgPreviewMeta');
+
+  previewBox.classList.add('visible');
+  container.innerHTML = svgString;
+  meta.textContent = `Vector SVG · ${(svgString.length / 1024).toFixed(1)}KB · infinite resolution ✓`;
+
+  // Store for download
+  window._receivedSvgString = svgString;
+  window._receivedSvgFilename = 'received-vector.svg';
+
+  // Show download box
+  const dlBox  = document.getElementById('fileDownloadBox');
+  const dlName = document.getElementById('fileDownloadName');
+  const dlSub  = document.getElementById('fileDownloadSub');
+  const dlBtn  = document.getElementById('fileDownloadBtn');
+  const dlIcon = document.getElementById('fileDownloadIcon');
+  dlBox.style.display = 'flex';
+  dlBox.classList.add('svg-box');
+  dlIcon.textContent = '◈';
+  dlName.textContent = 'received-vector.svg';
+  dlSub.textContent  = `SVG · ${(svgString.length / 1024).toFixed(1)}KB · auto-saved ✓`;
+  dlBtn.classList.add('svg-btn');
+  dlBtn.onclick = downloadReceivedSvg;
+
+  document.getElementById('accumulatedText').textContent = '';
+  setStatus('✓ SVG complete — auto-saved!');
+
+  // Auto-save
+  try {
+    const blob    = new Blob([svgString], { type: 'image/svg+xml' });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl; a.download = 'received-vector.svg';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    showToast('SVG saved ✓', true);
+  } catch(e) {
+    showToast('Tap Download to save SVG');
+  }
+}
+
+function downloadReceivedSvg() {
+  if (!window._receivedSvgString) return;
+  const blob = new Blob([window._receivedSvgString], { type: 'image/svg+xml' });
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = window._receivedSvgFilename || 'received.svg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+async function updateTextDisplay() {
+  const box  = document.getElementById('accumulatedText');
+  const keys = Object.keys(scannedChunks).map(Number).sort((a, b) => a - b);
+  const scanned = keys.length;
+  const pill = document.getElementById('progressPill');
+
+  if (scanned > 0 && scannedChunks[keys[0]] === true) {
+    box.textContent = `Receiving data… ${scanned}/${totalChunks || '?'} chunks scanned`;
+    pill.textContent = totalChunks ? `${scanned}/${totalChunks}` : `${scanned} scanned`;
+    pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
+    return;
+  }
+
+  pill.textContent = totalChunks ? `${scanned}/${totalChunks} scanned` : `${scanned} scanned`;
+  pill.className = 'progress-pill' + (scanned === totalChunks && totalChunks ? ' done' : '');
+
+  if (isCompressed) {
+    if (totalChunks && scanned === totalChunks) {
+      const allPayload = keys.map(k => scannedChunks[k]).join('');
+      try {
+        box.textContent = await decompressText(allPayload);
+      } catch(e) {
+        box.textContent = allPayload;
+      }
+      box.classList.remove('flash-new'); void box.offsetWidth; box.classList.add('flash-new');
+    } else {
+      box.textContent = `Scanning… ${scanned}${totalChunks ? '/'+totalChunks : ''} chunks received`;
+    }
+    return;
+  }
+
+  let contiguousEnd = 0;
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i] === contiguousEnd + 1) contiguousEnd = keys[i];
+    else break;
+  }
+  const displayKeys = keys.filter(k => k <= contiguousEnd);
+  const text = displayKeys.map(k => scannedChunks[k]).join(' ');
+  box.textContent = text || 'Scan QR codes in order — text will appear here…';
+  box.classList.remove('flash-new'); void box.offsetWidth; box.classList.add('flash-new');
+}
+
+// ── SCAN TIMELINE ──
+let lastKnownTotal = 0;
+
+function updateTimeline(total, isSvg) {
+  if (!total) return;
+  lastKnownTotal = total;
+
+  const wrap  = document.getElementById('tlWrap');
+  const strip = document.getElementById('tlStrip');
+  const stats = document.getElementById('tlStats');
+  const badge = document.getElementById('tlMissBadge');
+
+  wrap.style.display = 'block';
+
+  const got     = Object.keys(scannedChunks).length;
+  const missing = total - got;
+
+  stats.textContent = `${got} / ${total}`;
+  badge.style.display = missing > 0 ? 'inline' : 'none';
+  if (missing > 0) badge.textContent = `${missing} missing`;
+
+  const receivedIdxs = Object.keys(scannedChunks).map(Number);
+  const frontier = receivedIdxs.length ? Math.max(...receivedIdxs) : 0;
+
+  const existingCells = strip.children.length;
+  for (let i = existingCells + 1; i <= total; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'tl-cell';
+    cell.dataset.frame = i;
+    const num = document.createElement('div');
+    num.className = 'tl-cell-num';
+    num.textContent = i;
+    const bar = document.createElement('div');
+    bar.className = 'tl-cell-bar';
+    cell.appendChild(num);
+    cell.appendChild(bar);
+    strip.appendChild(cell);
+  }
+
+  for (let i = 1; i <= total; i++) {
+    const cell      = strip.children[i - 1];
+    const isGot     = !!scannedChunks[i];
+    const isMiss    = !isGot && i < frontier;
+    const isCurrent = isGot && i === frontier;
+
+    let cls = 'tl-cell';
+    if (isGot)   cls += isSvg ? ' got svg-cell' : ' got';
+    if (isMiss)  cls += ' miss';
+    if (isCurrent) cls += ' current';
+    if (cell.className !== cls) cell.className = cls;
+
+    const prevState = cell.dataset.state || '';
+    const newState  = isGot ? 'got' : isMiss ? 'miss' : 'pending';
+    if (prevState !== newState) {
+      cell.dataset.state = newState;
+      cell.onclick = isMiss ? () => showMissingHint(i, total, frontier)
+                   : isGot  ? () => showToast(`Frame ${i} scanned ✓`, true)
+                             : () => showToast(`Frame ${i} not yet reached`, false);
+      cell.title = isMiss ? `Frame ${i} missing`
+                 : isGot  ? `Frame ${i} ✓`
+                           : `Frame ${i} — not yet scanned`;
+    }
+  }
+
+  if (frontier > 0) {
+    const cellW = 31;
+    const stripWrap = document.querySelector('.tl-strip-wrap');
+    if (stripWrap) stripWrap.scrollLeft = Math.max(0, (frontier - 3) * cellW);
+  }
+
+  const summary  = document.getElementById('tlMissingSummary');
+  const chipsEl  = document.getElementById('tlMissingChips');
+  if (!summary || !chipsEl) return;
+
+  const missingIdxs = [];
+  for (let i = 1; i < frontier; i++) {
+    if (!scannedChunks[i]) missingIdxs.push(i);
+  }
+
+  if (missingIdxs.length === 0) { summary.classList.remove('visible'); return; }
+  summary.classList.add('visible');
+  chipsEl.innerHTML = '';
+
+  const ranges = [];
+  let rStart = missingIdxs[0], rEnd = missingIdxs[0];
+  for (let i = 1; i <= missingIdxs.length; i++) {
+    if (i < missingIdxs.length && missingIdxs[i] === rEnd + 1) {
+      rEnd = missingIdxs[i];
+    } else {
+      ranges.push([rStart, rEnd]);
+      if (i < missingIdxs.length) { rStart = missingIdxs[i]; rEnd = missingIdxs[i]; }
+    }
+  }
+
+  ranges.forEach(([s, e]) => {
+    const chip = document.createElement('div');
+    chip.className = 'tl-miss-chip' + (s !== e ? ' range' : '');
+    chip.textContent = s === e ? `${s}` : `${s}–${e}`;
+    chip.title = s === e ? `Frame ${s} missing` : `Frames ${s}–${e} missing (${e - s + 1})`;
+    chip.onclick = () => showMissingHint(s, total, frontier);
+    chipsEl.appendChild(chip);
+  });
+}
+
+function showMissingHint(n, total, frontier) {
+  let rangeStart = n, rangeEnd = n;
+  while (rangeStart > 1 && !scannedChunks[rangeStart - 1]) rangeStart--;
+  while (rangeEnd < frontier - 1 && !scannedChunks[rangeEnd + 1]) rangeEnd++;
+
+  const hintTxt = document.getElementById('tlHintText');
+  let msg = rangeStart === rangeEnd
+    ? `Jump to frame ${n} on the sender screen`
+    : `Jump to frame ${rangeStart} — missing ${rangeStart}–${rangeEnd} (${rangeEnd - rangeStart + 1} frames)`;
+  hintTxt.textContent = msg;
+  document.getElementById('tlHint').style.display = 'flex';
+
+  const jumpInput = document.getElementById('ssJumpInput');
+  if (jumpInput) jumpInput.value = rangeStart;
+
+  showToast(`Missing: frame${rangeStart === rangeEnd ? '' : 's'} ${rangeStart}${rangeStart !== rangeEnd ? '–' + rangeEnd : ''}`, false);
+}
+
+function setStatus(msg) {
+  document.getElementById('scanStatus').textContent = msg;
+}
+
+function resetReader() {
+  scannedChunks = {}; svgChunks = {}; fileChunks = {}; recvB64Full = '';
+  totalChunks   = null;
+  lastScanned   = null;
+  isCompressed  = false;
+  isSvgChain    = false;
+  window._receivedSvgString = null;
+
+  document.getElementById('fileDownloadBox').style.display = 'none';
+  document.getElementById('fileDownloadBox').classList.remove('svg-box');
+  document.getElementById('fileDownloadBtn').classList.remove('svg-btn');
+  document.getElementById('fileDownloadBtn').onclick = downloadReceivedFile;
+  document.getElementById('fileDownloadIcon').textContent = '🖼';
+  document.getElementById('outputLabel').textContent = 'Accumulated Text';
+
+  const svgPB = document.getElementById('svgPreviewBox');
+  svgPB.classList.remove('visible');
+  document.getElementById('svgPreviewContainer').innerHTML = '';
+
+  const box = document.getElementById('accumulatedText');
+  box.textContent = 'Scan QR codes in order — text will appear here…';
+  document.getElementById('progressPill').textContent = '0 scanned';
+  document.getElementById('progressPill').className = 'progress-pill';
+  document.getElementById('tlWrap').style.display = 'none';
+  document.getElementById('tlStrip').innerHTML = '';
+  document.getElementById('tlHint').style.display = 'none';
+  const ms = document.getElementById('tlMissingSummary');
+  if (ms) ms.classList.remove('visible');
+  lastKnownTotal = 0;
+  setStatus('Align QR code in frame');
+  showToast('Reader reset');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SLIDESHOW
+// ═══════════════════════════════════════════════════════════
+let ssChunks   = [];
+let ssInterval = null;
+let ssCurrent  = -1;
+let ssSpeed    = 500;
+let ssLoopCount = 0;
+
+const CAL_PAYLOAD = encodeURIComponent('QRCAL|Calibration — point camera here and hold steady');
+
+function openSlideshow() {
+  if (!ssChunks.length) { showToast('Generate a chain first'); return; }
+  document.getElementById('slideshow').style.display = 'flex';
+  ssCurrent   = -1;
+  ssLoopCount = 0;
+  clearInterval(ssInterval);
+  ssInterval = null;
+  showSlide(-1);
+  const overlay = document.getElementById('ssTapOverlay');
+  if (overlay) overlay.style.display = 'flex';
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '▶'; btn.style.background = 'rgba(39,174,96,0.35)'; }
+}
+
+function ssTapToStart() {
+  const overlay = document.getElementById('ssTapOverlay');
+  if (!overlay || overlay.style.display === 'none') return;
+  overlay.style.display = 'none';
+  ssCurrent = 0;
+  showSlide(0);
+  ssInterval = setInterval(advanceSlide, ssSpeed);
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '⏸'; btn.style.background = ''; }
+}
+
+function closeSlideshow() {
+  clearInterval(ssInterval);
+  ssInterval = null;
+  document.getElementById('slideshow').style.display = 'none';
+}
+
+function advanceSlide() {
+  ssCurrent++;
+  if (ssCurrent >= ssChunks.length) { ssCurrent = 0; ssLoopCount++; }
+  showSlide(ssCurrent);
+  prefetchSlide(ssCurrent + 1);
+}
+
+function prefetchSlide(idx) {
+  if (idx < 0 || idx >= ssChunks.length) return;
+  const payload = ssChunks[idx];
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
+  const img = new Image();
+  img.src = url;
+}
+
+function showSlide(idx) {
+  const img     = document.getElementById('ssQrImg');
+  const label   = document.getElementById('ssLabel');
+  const loopTag = document.getElementById('ssLoopTag');
+  const counter = document.getElementById('ssFrameCounter');
+  const bar     = document.getElementById('ssProgressBar');
+  const total   = ssChunks.length;
+
+  if (idx === -1) {
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${CAL_PAYLOAD}`;
+    label.textContent = 'CALIBRATION';
+    label.style.color = '#f39c12';
+    loopTag.classList.remove('visible');
+    if (counter) counter.textContent = '';
+    bar.style.width = '0%';
+    bar.style.transitionDuration = '0ms';
+    bar.className = 'ss-progress-bar calibration';
+  } else {
+    const payload = allChunks[idx];
+    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&ecc=L&format=png&margin=20&data=${encodeURIComponent(payload)}`;
+    label.textContent = currentChainType === 'svg' ? 'BROADCAST ◈SVG' : 'BROADCAST';
+    label.style.color = currentChainType === 'svg' ? '#a78bfa' : '#555';
+    if (counter) counter.textContent = `${idx + 1} / ${total}`;
+    if (ssLoopCount > 0) {
+      loopTag.textContent = `LOOP ${ssLoopCount + 1}`;
+      loopTag.classList.add('visible');
+    } else {
+      loopTag.classList.remove('visible');
+    }
+    bar.style.transitionDuration = '0ms';
+    bar.style.width = ((idx / total) * 100) + '%';
+    bar.className = 'ss-progress-bar';
+    requestAnimationFrame(() => {
+      bar.style.transitionDuration = ssSpeed + 'ms';
+      bar.style.width = (((idx + 1) / total) * 100) + '%';
+    });
+  }
+}
+
+function jumpTo() {
+  const input = document.getElementById('ssJumpInput');
+  const n = parseInt(input.value);
+  if (!n || n < 1 || n > ssChunks.length) return;
+  const overlay = document.getElementById('ssTapOverlay');
+  if (overlay) overlay.style.display = 'none';
+  const wasPlaying = !!ssInterval;
+  if (!wasPlaying) clearSsInterval();
+  ssCurrent = n - 1;
+  showSlide(ssCurrent);
+  if (!wasPlaying) {
+    ssInterval = setInterval(advanceSlide, ssSpeed);
+    const btn = document.getElementById('ssPlayPause');
+    if (btn) { btn.textContent = '⏸'; btn.style.background = ''; }
+  }
+}
+
+function jumpPrev()  { ssCurrent = Math.max(0, ssCurrent - 1); showSlide(ssCurrent); }
+function jumpNext()  { ssCurrent = Math.min(ssChunks.length - 1, ssCurrent + 1); showSlide(ssCurrent); }
+function jumpFirst() { ssCurrent = 0; showSlide(0); }
+function jumpLast()  { ssCurrent = ssChunks.length - 1; showSlide(ssCurrent); }
+
+function handleProgressClick(e) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const frac = (e.clientX - rect.left) / rect.width;
+  const idx  = Math.floor(frac * ssChunks.length);
+  clearSsInterval();
+  ssCurrent = Math.max(0, Math.min(ssChunks.length - 1, idx));
+  showSlide(ssCurrent);
+}
+
+function togglePlay() {
+  const overlay = document.getElementById('ssTapOverlay');
+  if (overlay) overlay.style.display = 'none';
+  const btn = document.getElementById('ssPlayPause');
+  if (ssInterval) {
+    clearInterval(ssInterval); ssInterval = null;
+    if (btn) { btn.textContent = '▶'; btn.style.background = 'rgba(39,174,96,0.35)'; }
+  } else {
+    if (ssCurrent === -1) { ssCurrent = 0; showSlide(0); }
+    ssInterval = setInterval(advanceSlide, ssSpeed);
+    if (btn) { btn.textContent = '⏸'; btn.style.background = ''; }
+  }
+}
+
+function clearSsInterval() {
+  clearInterval(ssInterval); ssInterval = null;
+  const btn = document.getElementById('ssPlayPause');
+  if (btn) { btn.textContent = '▶'; btn.style.background = 'rgba(39,174,96,0.35)'; }
+}
+
+function adjustSpeed(delta) {
+  ssSpeed = Math.min(10000, Math.max(50, ssSpeed + delta));
+  const secs = ssSpeed / 1000;
+  const lbl = secs < 1
+    ? secs.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + 's'
+    : secs.toFixed(2).replace(/\.?0+$/, '') + 's';
+  document.getElementById('ssSpdLabel').textContent = lbl;
+  document.getElementById('drwSpeed').value = secs;
+  if (ssInterval) { clearInterval(ssInterval); ssInterval = setInterval(advanceSlide, ssSpeed); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MODAL
+// ═══════════════════════════════════════════════════════════
+function openModal(idx, total, text) {
+  document.getElementById('modalTitle').textContent = `Code ${idx} of ${total}`;
+  document.getElementById('modalBody').textContent = text;
+  document.getElementById('textModal').classList.add('open');
+}
+function closeModal(e) {
+  if (e.target === document.getElementById('textModal'))
+    document.getElementById('textModal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CUSTOM PRESETS
+// ═══════════════════════════════════════════════════════════
+const CUSTOM_PRESETS_KEY = 'qrchain-custom-presets';
+
+function loadCustomPresets() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_PRESETS_KEY) || '[]');
+    saved.forEach(p => addPresetButton(p.name, p.chunk, p.speed));
+  } catch(e) {}
+}
+
+function addPresetButton(name, chunk, speed) {
+  const list = document.getElementById('presetList');
+  const btn  = document.createElement('button');
+  btn.className = 'preset-btn preset-btn-custom';
+  btn.innerHTML = `<span class="preset-name">${name}</span><span class="preset-sub">${(speed/1000).toFixed(2).replace(/\.?0+$/,'')}s · ${chunk} chars</span>`;
+  btn.onclick = () => applyPreset(chunk, speed);
+  const del = document.createElement('button');
+  del.className = 'preset-btn-delete';
+  del.textContent = '✕';
+  del.title = 'Delete preset';
+  del.onclick = (e) => { e.stopPropagation(); deleteCustomPreset(name); btn.remove(); };
+  btn.appendChild(del);
+  list.appendChild(btn);
+}
+
+function showAddPreset()   { document.getElementById('addPresetForm').style.display = 'flex'; document.getElementById('addPresetBtn').style.display = 'none'; setTimeout(() => document.getElementById('newPresetName').focus(), 50); }
+function cancelAddPreset() { document.getElementById('addPresetForm').style.display = 'none'; document.getElementById('addPresetBtn').style.display = 'block'; document.getElementById('newPresetName').value = ''; }
+
+function saveCustomPreset() {
+  const name = document.getElementById('newPresetName').value.trim();
+  if (!name) { showToast('Enter a name'); return; }
+  const chunk = parseInt(document.getElementById('drwChunk').value);
+  const speed = Math.round(parseFloat(document.getElementById('drwSpeed').value) * 1000);
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_PRESETS_KEY) || '[]');
+    if (saved.find(p => p.name === name)) { showToast('Name already used'); return; }
+    saved.push({ name, chunk, speed });
+    localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(saved));
+  } catch(e) {}
+  addPresetButton(name, chunk, speed);
+  cancelAddPreset();
+  showToast(`"${name}" saved`, true);
+}
+
+function deleteCustomPreset(name) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_PRESETS_KEY) || '[]');
+    localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(saved.filter(p => p.name !== name)));
+  } catch(e) {}
+  showToast('Preset deleted');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SETTINGS DRAWER
+// ═══════════════════════════════════════════════════════════
+const SETTINGS_KEY = 'qrchain-settings';
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const chunk = s.chunk || 500;
+    const speed = s.speed || 160;
+    const deflate = s.deflate !== false;
+    applyPreset(chunk, speed, true);
+    document.getElementById('drwSpeed').value = speed / 1000;
+    document.getElementById('useDeflate').checked = deflate;
+  } catch(e) {}
+}
+
+function applyPreset(chunk, speed, silent) {
+  document.getElementById('drwChunk').value = chunk;
+  syncChunk(chunk);
+  ssSpeed = speed;
+  const speedSecs = speed / 1000;
+  document.getElementById('drwSpeed').value = speedSecs;
+  const lbl = speedSecs < 1
+    ? speedSecs.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + 's'
+    : speedSecs.toFixed(2).replace(/\.?0+$/, '') + 's';
+  document.getElementById('ssSpdLabel').textContent = lbl;
+  if (!silent) { showToast('Preset applied', true); closeSettings(); }
+}
+
+function syncChunk(val) {
+  document.getElementById('drwChunkVal').textContent = val;
+  const hint = document.getElementById('drwChunkHint');
+  if (!hint) return;
+  const n = parseInt(val);
+  if (n <= 300)       { hint.textContent = '— easy to scan'; hint.style.color = '#27ae60'; }
+  else if (n <= 700)  { hint.textContent = '— good'; hint.style.color = '#aaa'; }
+  else if (n <= 1200) { hint.textContent = '— dense, needs good light'; hint.style.color = '#f39c12'; }
+  else if (n <= 1800) { hint.textContent = '— very dense, may fail on older phones'; hint.style.color = '#e67e22'; }
+  else                { hint.textContent = '— max density, use with caution'; hint.style.color = '#c0392b'; }
+}
+
+function syncSpeedInput(val) {
+  const secs = parseFloat(val);
+  if (isNaN(secs) || secs <= 0) return;
+  ssSpeed = Math.round(secs * 1000);
+  const label = secs < 1
+    ? secs.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + 's'
+    : secs.toFixed(2).replace(/\.?0+$/, '') + 's';
+  document.getElementById('ssSpdLabel').textContent = label;
+  if (ssInterval) { clearInterval(ssInterval); ssInterval = setInterval(advanceSlide, ssSpeed); }
+}
+
+function clampSpeedInput() {
+  const input = document.getElementById('drwSpeed');
+  let secs = parseFloat(input.value);
+  if (isNaN(secs) || secs < 0.05) secs = 0.05;
+  if (secs > 10) secs = 10;
+  input.value = secs;
+  syncSpeedInput(secs);
+}
+
+function saveDefaults() {
+  const chunk   = parseInt(document.getElementById('drwChunk').value);
+  const speed   = Math.round(parseFloat(document.getElementById('drwSpeed').value) * 1000);
+  const deflate = document.getElementById('useDeflate').checked;
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ chunk, speed, deflate }));
+    showToast('Defaults saved', true);
+    closeSettings();
+  } catch(e) { showToast('Save failed'); }
+}
+
+function openSettings()  { document.getElementById('settingsDrawer').classList.add('open'); document.getElementById('settingsBackdrop').style.display = 'block'; }
+function closeSettings() { document.getElementById('settingsDrawer').classList.remove('open'); document.getElementById('settingsBackdrop').style.display = 'none'; }
+
+loadSettings();
+loadCustomPresets();
+
+// ═══════════════════════════════════════════════════════════
+//  COPY TEXT
+// ═══════════════════════════════════════════════════════════
+function copyText() {
+  const text = document.getElementById('accumulatedText').textContent;
+  if (!text || text.startsWith('Scan QR')) { showToast('Nothing to copy yet'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => showToast('Copy failed'));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PDF IMPORT
+// ═══════════════════════════════════════════════════════════
+let pdfJsLoaded = false;
+let loadedPdfFile = null;
+
+function showPdfActions(name) {
+  document.getElementById('pdfFileName').textContent = name;
+  document.getElementById('pdfActions').style.display = 'flex';
+}
+
+function reloadPdf() { if (!loadedPdfFile) { showToast('No PDF loaded'); return; } loadPdf(loadedPdfFile); }
+function removePdf() {
+  loadedPdfFile = null;
+  document.getElementById('pdfActions').style.display = 'none';
+  document.getElementById('textInput').value = '';
+  const dz = document.getElementById('pdfDropZone');
+  dz.querySelector('.pdf-drop-label').textContent = 'Parse PDF or Image → Text';
+  dz.querySelector('.pdf-drop-sub').textContent = 'Extracts readable text via PDF parsing or OCR';
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  showToast('PDF removed');
+}
+
+async function ensurePdfJs() {
+  if (pdfJsLoaded) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfJsLoaded = true;
+}
+
+function handleDragOver(e)  { e.preventDefault(); document.getElementById('pdfDropZone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('pdfDropZone').classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('pdfDropZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  if (file.type === 'application/pdf') loadPdf(file);
+  else if (file.type.startsWith('image/')) loadImage(file);
+  else showToast('Drop a PDF or image file');
+}
+function handleFileSelect(e) { const f = e.target.files[0]; if (f) loadPdf(f); e.target.value = ''; }
+function handleImgSelect(e)  { const f = e.target.files[0]; if (f) loadImage(f); e.target.value = ''; }
+
+async function loadPdf(file) {
+  loadedPdfFile = file;
+  const progress = document.getElementById('pdfProgress');
+  const fill     = document.getElementById('pdfProgressFill');
+  const label    = document.getElementById('pdfProgressLabel');
+  const dropZone = document.getElementById('pdfDropZone');
+
+  dropZone.style.display = 'none';
+  progress.style.display = 'block';
+  fill.style.width = '5%';
+  label.textContent = 'Loading PDF.js…';
+
+  try {
+    await ensurePdfJs();
+    label.textContent = 'Reading file…';
+    fill.style.width  = '15%';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    let fullText = '';
+
+    for (let i = 1; i <= numPages; i++) {
+      label.textContent = `Extracting page ${i} of ${numPages}…`;
+      fill.style.width  = (15 + (i / numPages) * 80) + '%';
+      const page    = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      fullText += content.items.map(item => item.str).join(' ') + '\n';
+    }
+
+    fill.style.width  = '100%';
+    label.textContent = `Done — ${fullText.trim().length.toLocaleString()} characters extracted`;
+    document.getElementById('textInput').value = fullText.trim();
+    try { localStorage.setItem(STORAGE_KEY, fullText.trim()); } catch(e) {}
+    showToast(`PDF loaded: ${numPages} page${numPages > 1 ? 's' : ''}, ${fullText.trim().length.toLocaleString()} chars`, true);
+
+    setTimeout(() => {
+      progress.style.display = 'none';
+      dropZone.style.display = 'block';
+      dropZone.querySelector('.pdf-drop-label').textContent = '✓ ' + file.name;
+      showPdfActions(file.name);
+      dropZone.querySelector('.pdf-drop-sub').textContent = 'Click or drop another PDF to replace';
+    }, 1400);
+  } catch(err) {
+    console.error(err);
+    showToast('Failed to read PDF: ' + err.message);
+    progress.style.display = 'none';
+    dropZone.style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  IMAGE OCR (Tesseract.js)
+// ═══════════════════════════════════════════════════════════
+let tesseractLoaded = false;
+
+async function ensureTesseract() {
+  if (tesseractLoaded) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  tesseractLoaded = true;
+}
+
+async function loadImage(file) {
+  loadedPdfFile = null;
+  const progress = document.getElementById('pdfProgress');
+  const fill     = document.getElementById('pdfProgressFill');
+  const label    = document.getElementById('pdfProgressLabel');
+  const dropZone = document.getElementById('pdfDropZone');
+
+  dropZone.style.display = 'none';
+  progress.style.display = 'block';
+  fill.style.width  = '5%';
+  label.textContent = 'Loading OCR engine…';
+
+  try {
+    await ensureTesseract();
+    fill.style.width  = '15%';
+    label.textContent = 'Recognising text…';
+
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          fill.style.width  = (15 + Math.round(m.progress * 80)) + '%';
+          label.textContent = `Recognising… ${Math.round(m.progress * 100)}%`;
+        }
+      }
+    });
+
+    const blobUrl = URL.createObjectURL(file);
+    let text = '';
+    try {
+      const { data } = await worker.recognize(blobUrl);
+      text = data.text;
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+      await worker.terminate();
+    }
+
+    const cleaned = text.trim();
+    fill.style.width  = '100%';
+    label.textContent = `Done — ${cleaned.length.toLocaleString()} characters extracted`;
+    document.getElementById('textInput').value = cleaned;
+    try { localStorage.setItem(STORAGE_KEY, cleaned); } catch(e) {}
+    showToast(`OCR done: ${cleaned.length.toLocaleString()} chars`, true);
+
+    setTimeout(() => {
+      progress.style.display = 'none';
+      dropZone.style.display = 'block';
+      showPdfActions(file.name + ' (OCR)');
+    }, 1400);
+  } catch(err) {
+    console.error(err);
+    showToast('OCR failed: ' + err.message);
+    progress.style.display = 'none';
+    dropZone.style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  IMAGE SEND (base64 encode → QR chain)  ── original feature
+// ═══════════════════════════════════════════════════════════
+let imgSendFile = null;
+let imgSendB64  = null;
+let imgSendMime = 'image/jpeg';
+let srcImg      = null;
+let srcOrigBytes = 0;
+
+function handleImgSendDragOver(e)  { e.preventDefault(); document.getElementById('imgSendZone').classList.add('drag-over'); }
+function handleImgSendDragLeave(e) { document.getElementById('imgSendZone').classList.remove('drag-over'); }
+function handleImgSendDrop(e) {
+  e.preventDefault();
+  document.getElementById('imgSendZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) prepareImgSend(file);
+  else showToast('Drop an image file');
+}
+function handleImgSendSelect(e) { const f = e.target.files[0]; if (f) prepareImgSend(f); e.target.value = ''; }
+
+let srcOrigB64 = '';
+
+function prepareImgSend(file) {
+  imgSendFile  = file;
+  imgSendMime  = 'image/jpeg';
+  srcOrigBytes = file.size;
+  document.getElementById('imgSendName').textContent  = file.name;
+  document.getElementById('imgSendStats').textContent = 'Loading…';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    srcOrigB64    = dataUrl.split(',')[1];
+
+    const img = new Image();
+    img.onload = () => {
+      srcImg = img;
+      const naturalW = img.naturalWidth;
+      const maxWSlider = document.getElementById('imgMaxW');
+      maxWSlider.max   = naturalW;
+      maxWSlider.value = naturalW;
+      maxWSlider.step  = Math.max(10, Math.round(naturalW / 20));
+      document.getElementById('imgSendThumb').src = dataUrl;
+      document.getElementById('imgSendZone').style.display    = 'none';
+      document.getElementById('imgSendPreview').style.display = 'block';
+      updateImgPreview();
+      scheduleSvgPreview();
+    };
+    img.onerror = () => showToast('Could not read image');
+    img.src = dataUrl;
+  };
+  reader.onerror = () => showToast('File read failed');
+  reader.readAsDataURL(file);
+}
+
+function applyImgPreset(pct) {
+  if (!srcImg) return;
+  const naturalW = srcImg.naturalWidth;
+  const targetW  = Math.max(100, Math.round(naturalW * pct / 100));
+  const qSlider = document.getElementById('imgQuality');
+  const wSlider = document.getElementById('imgMaxW');
+  qSlider.value = pct;
+  wSlider.value = Math.min(targetW, parseInt(wSlider.max));
+  document.querySelectorAll('.img-compress-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`compressBtn${pct}`);
+  if (btn) btn.classList.add('active');
+  updateImgPreview();
+}
+
+function onSliderManual() {
+  document.querySelectorAll('.img-compress-btn').forEach(b => b.classList.remove('active'));
+  updateImgPreview();
+}
+
+let _imgPreviewTimer = null;
+function updateImgPreview() {
+  const qualVal = parseInt(document.getElementById('imgQuality').value);
+  const maxWVal = parseInt(document.getElementById('imgMaxW').value);
+  document.getElementById('imgQualityVal').textContent = qualVal;
+  document.getElementById('imgMaxWVal').textContent    = maxWVal;
+  if (!srcImg) return;
+  clearTimeout(_imgPreviewTimer);
+  _imgPreviewTimer = setTimeout(() => _renderImgPreview(qualVal, maxWVal), 120);
+}
+
+function _renderImgPreview(qualVal, maxWVal) {
+  const naturalW = srcImg.naturalWidth;
+  const naturalH = srcImg.naturalHeight;
+  const clampedW = Math.min(maxWVal, naturalW);
+  const scale    = clampedW / naturalW;
+  const w = Math.round(naturalW * scale);
+  const h = Math.round(naturalH * scale);
+  const quality = qualVal / 100;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(srcImg, 0, 0, w, h);
+
+  const dataUrl   = canvas.toDataURL('image/jpeg', quality);
+  imgSendB64      = dataUrl.split(',')[1];
+  imgSendMime     = 'image/jpeg';
+
+  document.getElementById('imgSendThumb').src = dataUrl;
+
+  const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
+  const payloadLen = imgSendFile.name.length + 'image/jpeg'.length + 2 + imgSendB64.length;
+  const codes      = Math.ceil(payloadLen / chunkSize);
+  const outKB      = (imgSendB64.length * 0.75 / 1024).toFixed(1);
+  const origKB     = (srcOrigBytes / 1024).toFixed(1);
+  document.getElementById('imgSendStats').textContent =
+    `${w}×${h}px · ${origKB}KB orig → ${outKB}KB · ~${codes} QR codes`;
+}
+
+function encodeImageChain() {
+  if (!imgSendB64) { showToast('No image loaded'); return; }
+  const fname      = imgSendFile.name;
+  const payload    = `${fname}|image/jpeg|${imgSendB64}`;
+  const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
+  const total      = Math.ceil(payload.length / chunkSize);
+  const qrfChunks  = [];
+  for (let i = 0; i < total; i++) {
+    const part = payload.slice(i * chunkSize, (i + 1) * chunkSize);
+    qrfChunks.push(`QRF|${i+1}/${total}|${part}`);
+  }
+  allChunks   = qrfChunks;
+  ssChunks    = qrfChunks;
+  currentPage = 0;
+  currentChainType = 'file';
+  document.getElementById('seqCount').textContent = `${total} code${total > 1 ? 's' : ''}`;
+  document.getElementById('qrSequence').style.display = 'block';
+  document.getElementById('broadcastBtn').style.display = 'flex';
+  renderPage(0, false);
+  showToast(`Image (JPEG): ${total} QR codes`, true);
+}
+
+function clearImgSend() {
+  imgSendFile = imgSendB64 = null; srcImg = null; srcOrigB64 = '';
+  svgVectorised = null;
+  document.getElementById('imgSendPreview').style.display = 'none';
+  document.getElementById('imgSendZone').style.display    = 'block';
+  document.getElementById('imgSendThumb').src = '';
+  document.getElementById('svgPreviewWrap').style.display = 'none';
+  document.getElementById('svgProgress').classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ◈ SVG VECTORISATION ENGINE
+//  Approach: colour-quantise → per-colour flood-fill regions
+//            → simplified polygon outlines → SVG paths
+//  This is a pure JS implementation — no external libs needed.
+// ═══════════════════════════════════════════════════════════
+
+let svgVectorised  = null;  // stores latest generated SVG string
+let svgMode        = 'colour';
+let _svgPreviewTimer = null;
+
+function setSvgMode(mode) {
+  svgMode = mode;
+  document.querySelectorAll('.svg-mode-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.mode === mode);
+  });
+  // Hide colour count for mono/contour modes
+  const colourRow = document.getElementById('svgColours').closest('div');
+  colourRow.style.display = (mode === 'colour') ? 'block' : 'none';
+  scheduleSvgPreview();
+}
+
+function scheduleSvgPreview() {
+  clearTimeout(_svgPreviewTimer);
+  _svgPreviewTimer = setTimeout(runSvgPreview, 300);
+}
+
+async function runSvgPreview() {
+  if (!srcImg) return;
+  const detail    = parseInt(document.getElementById('svgDetail').value);
+  const numColours = parseInt(document.getElementById('svgColours').value);
+
+  const prog  = document.getElementById('svgProgress');
+  const fill  = document.getElementById('svgProgressFill');
+  const label = document.getElementById('svgProgressLabel');
+  prog.classList.add('visible');
+  fill.style.width  = '10%';
+  label.textContent = 'Quantising colours…';
+
+  try {
+    // Work at reduced resolution for speed; detail slider scales it
+    const scale    = Math.max(0.05, Math.min(1, detail / 100));
+    const maxEdge  = 400;
+    const naturalW = srcImg.naturalWidth;
+    const naturalH = srcImg.naturalHeight;
+    const ratio    = Math.min(1, (maxEdge * scale) / Math.max(naturalW, naturalH));
+    const w = Math.max(4, Math.round(naturalW * ratio));
+    const h = Math.max(4, Math.round(naturalH * ratio));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(srcImg, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+
+    fill.style.width = '30%';
+    label.textContent = 'Building regions…';
+    await yieldFrame();
+
+    let svgString;
+    if (svgMode === 'mono') {
+      svgString = await buildMonoSvg(imageData, w, h, naturalW, naturalH);
+    } else if (svgMode === 'contour') {
+      svgString = await buildContourSvg(imageData, w, h, naturalW, naturalH);
+    } else {
+      svgString = await buildColourSvg(imageData, w, h, naturalW, naturalH, numColours);
+    }
+
+    fill.style.width = '90%';
+    label.textContent = 'Compressing…';
+    await yieldFrame();
+
+    svgVectorised = svgString;
+
+    // Show preview
+    const thumbBox = document.getElementById('svgThumbBox');
+    thumbBox.innerHTML = svgString;
+    // Force SVG to fill the box
+    const svgEl = thumbBox.querySelector('svg');
+    if (svgEl) { svgEl.style.width = '100%'; svgEl.style.height = '100%'; }
+
+    const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
+    const gzipped   = await gzipSvg(svgString);
+    const codes     = Math.ceil(gzipped.length / chunkSize);
+    const jpegCodes = imgSendB64
+      ? Math.ceil((imgSendFile.name.length + 12 + imgSendB64.length) / chunkSize)
+      : '?';
+
+    const pathCount  = (svgString.match(/<path/g) || []).length +
+                       (svgString.match(/<rect/g) || []).length;
+    const svgKB      = (svgString.length / 1024).toFixed(1);
+    const gzippedKB  = (gzipped.length * 0.75 / 1024).toFixed(1);
+
+    document.getElementById('svgStatSize').textContent   = `${svgKB}KB (gzip→${gzippedKB}KB)`;
+    document.getElementById('svgStatPaths').textContent  = pathCount;
+    document.getElementById('svgStatCodes').textContent  = codes;
+    document.getElementById('svgStatVsJpeg').textContent =
+      typeof jpegCodes === 'number'
+        ? (codes < jpegCodes ? `${jpegCodes - codes} fewer codes ✓` : `${codes - jpegCodes} more codes`)
+        : '—';
+
+    document.getElementById('svgPreviewWrap').style.display = 'flex';
+
+    // Update badge
+    const badge = document.getElementById('svgSizeBadge');
+    badge.textContent = `◈ ${codes} codes`;
+    badge.style.opacity = '1';
+
+    fill.style.width = '100%';
+    label.textContent = `Done — ${svgKB}KB SVG, ~${codes} QR codes`;
+    setTimeout(() => prog.classList.remove('visible'), 1500);
+  } catch(e) {
+    console.error('SVG vectorise error:', e);
+    label.textContent = 'Error: ' + e.message;
+    setTimeout(() => prog.classList.remove('visible'), 2000);
+  }
+}
+
+function yieldFrame() {
+  return new Promise(r => requestAnimationFrame(r));
+}
+
+// ── Colour SVG: quantise → flood-fill regions → outline paths ──
+async function buildColourSvg(imageData, w, h, outW, outH, numColours) {
+  const pixels = imageData.data;
+
+  // 1. Collect palette using median-cut quantisation
+  const palette = medianCut(pixels, w, h, numColours);
+
+  // 2. Map each pixel to nearest palette colour
+  const indexed = new Uint16Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = pixels[i * 4], g = pixels[i * 4 + 1], b = pixels[i * 4 + 2];
+    indexed[i] = nearestPaletteIdx(r, g, b, palette);
+  }
+
+  await yieldFrame();
+
+  // 3. Find connected regions per colour via BFS flood fill
+  // Each region = {colourIdx, pixels: Set of (y*w+x)}
+  const visited = new Uint8Array(w * h);
+  const regions = [];
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      if (visited[idx]) continue;
+      const cIdx = indexed[idx];
+      // BFS
+      const region = [];
+      const queue  = [idx];
+      visited[idx] = 1;
+      while (queue.length) {
+        const cur = queue.pop();
+        region.push(cur);
+        const cx = cur % w, cy = (cur - cx) / w;
+        const neighbours = [
+          cy > 0     ? (cy-1)*w+cx : -1,
+          cy < h-1   ? (cy+1)*w+cx : -1,
+          cx > 0     ? cy*w+cx-1   : -1,
+          cx < w-1   ? cy*w+cx+1   : -1,
+        ];
+        for (const nb of neighbours) {
+          if (nb >= 0 && !visited[nb] && indexed[nb] === cIdx) {
+            visited[nb] = 1;
+            queue.push(nb);
+          }
+        }
+      }
+      if (region.length > 1) regions.push({ cIdx, pixels: region });
+    }
+  }
+
+  await yieldFrame();
+
+  // 4. Build SVG rects grouped by colour (much more compact than paths for pixel art)
+  // For larger images, group runs of same-colour pixels per row → horizontal rects
+  const scaleX = outW / w;
+  const scaleY = outH / h;
+
+  // Build row-runs per colour index
+  const colourRects = {}; // cIdx → array of {x,y,w,h}
+  for (let y = 0; y < h; y++) {
+    let runStart = 0;
+    let runCI    = indexed[y * w];
+    for (let x = 1; x <= w; x++) {
+      const ci = x < w ? indexed[y * w + x] : -1;
+      if (ci !== runCI) {
+        const len = x - runStart;
+        if (!colourRects[runCI]) colourRects[runCI] = [];
+        colourRects[runCI].push([runStart, y, len, 1]);
+        runStart = x;
+        runCI    = ci;
+      }
+    }
+  }
+
+  // Merge vertically adjacent runs with same x/w
+  for (const ci in colourRects) {
+    const rects = colourRects[ci];
+    rects.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const merged = [];
+    for (const r of rects) {
+      const last = merged.length > 0 ? merged[merged.length - 1] : null;
+      if (last && last[0] === r[0] && last[2] === r[2] && last[1] + last[3] === r[1]) {
+        last[3]++;
+      } else {
+        merged.push([...r]);
+      }
+    }
+    colourRects[ci] = merged;
+  }
+
+  await yieldFrame();
+
+  // 5. Emit SVG
+  const ns = 'http://www.w3.org/2000/svg';
+  let svgParts = [`<svg xmlns="${ns}" viewBox="0 0 ${outW} ${outH}" shape-rendering="crispEdges">`];
+
+  // Background = most-common colour
+  const bgCI   = parseInt(Object.entries(colourRects).sort((a,b) => b[1].length - a[1].length)[0][0]);
+  const bgCol  = palette[bgCI];
+  svgParts.push(`<rect width="${outW}" height="${outH}" fill="${rgbToHex(...bgCol)}"/>`);
+
+  for (const ci in colourRects) {
+    if (parseInt(ci) === bgCI) continue;
+    const col  = palette[ci];
+    const hex  = rgbToHex(...col);
+    const rects = colourRects[ci];
+    // Group by colour for compactness
+    svgParts.push(`<g fill="${hex}">`);
+    for (const [rx, ry, rw, rh] of rects) {
+      const sx = (rx * scaleX).toFixed(1);
+      const sy = (ry * scaleY).toFixed(1);
+      const sw = (rw * scaleX).toFixed(1);
+      const sh = (rh * scaleY).toFixed(1);
+      svgParts.push(`<rect x="${sx}" y="${sy}" width="${sw}" height="${sh}"/>`);
+    }
+    svgParts.push('</g>');
+  }
+  svgParts.push('</svg>');
+  return svgParts.join('');
+}
+
+// ── Mono SVG: threshold → white/black rects ──
+async function buildMonoSvg(imageData, w, h, outW, outH) {
+  const pixels = imageData.data;
+  const scaleX = outW / w;
+  const scaleY = outH / h;
+
+  // Auto-threshold (Otsu's method)
+  const hist = new Array(256).fill(0);
+  for (let i = 0; i < w * h; i++) {
+    const r = pixels[i*4], g = pixels[i*4+1], b = pixels[i*4+2];
+    hist[Math.round(0.299*r + 0.587*g + 0.114*b)]++;
+  }
+  const total = w * h;
+  let sumB = 0, wB = 0, sum1 = 0;
+  for (let i = 0; i < 256; i++) sum1 += i * hist[i];
+  let maxVar = 0, threshold = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB, mF = (sum1 - sumB) / wF;
+    const v = wB * wF * (mB - mF) ** 2;
+    if (v > maxVar) { maxVar = v; threshold = t; }
+  }
+
+  // Build row-run rects for dark pixels
+  let svgParts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${outW} ${outH}" shape-rendering="crispEdges">`];
+  svgParts.push(`<rect width="${outW}" height="${outH}" fill="#fff"/>`);
+  svgParts.push('<g fill="#000">');
+  for (let y = 0; y < h; y++) {
+    let runStart = -1;
+    for (let x = 0; x <= w; x++) {
+      const dark = x < w ? (() => {
+        const r = pixels[(y*w+x)*4], g = pixels[(y*w+x)*4+1], b = pixels[(y*w+x)*4+2];
+        return (0.299*r + 0.587*g + 0.114*b) < threshold;
+      })() : false;
+      if (dark && runStart === -1) runStart = x;
+      if (!dark && runStart !== -1) {
+        const sx = (runStart * scaleX).toFixed(1);
+        const sy = (y * scaleY).toFixed(1);
+        const sw = ((x - runStart) * scaleX).toFixed(1);
+        const sh = scaleY.toFixed(1);
+        svgParts.push(`<rect x="${sx}" y="${sy}" width="${sw}" height="${sh}"/>`);
+        runStart = -1;
+      }
+    }
+  }
+  svgParts.push('</g></svg>');
+  return svgParts.join('');
+}
+
+// ── Contour SVG: edge-detect → stroke paths ──
+async function buildContourSvg(imageData, w, h, outW, outH) {
+  const pixels = imageData.data;
+  const grey   = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    grey[i] = (0.299*pixels[i*4] + 0.587*pixels[i*4+1] + 0.114*pixels[i*4+2]) / 255;
+  }
+
+  // Sobel edge detection
+  const edges = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const gx = -grey[(y-1)*w+(x-1)] + grey[(y-1)*w+(x+1)]
+               - 2*grey[y*w+(x-1)]    + 2*grey[y*w+(x+1)]
+               - grey[(y+1)*w+(x-1)]  + grey[(y+1)*w+(x+1)];
+      const gy = -grey[(y-1)*w+(x-1)] - 2*grey[(y-1)*w+x] - grey[(y-1)*w+(x+1)]
+               + grey[(y+1)*w+(x-1)]  + 2*grey[(y+1)*w+x] + grey[(y+1)*w+(x+1)];
+      edges[y*w+x] = Math.sqrt(gx*gx + gy*gy);
+    }
+  }
+
+  const scaleX = outW / w;
+  const scaleY = outH / h;
+  const thresh  = 0.15;
+
+  // Build row-run rects for edge pixels
+  let svgParts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${outW} ${outH}" shape-rendering="crispEdges">`];
+  svgParts.push(`<rect width="${outW}" height="${outH}" fill="#f8f8f8"/>`);
+  svgParts.push('<g fill="#111">');
+  for (let y = 0; y < h; y++) {
+    let runStart = -1;
+    for (let x = 0; x <= w; x++) {
+      const isEdge = x < w && edges[y*w+x] > thresh;
+      if (isEdge && runStart === -1) runStart = x;
+      if (!isEdge && runStart !== -1) {
+        svgParts.push(`<rect x="${(runStart*scaleX).toFixed(1)}" y="${(y*scaleY).toFixed(1)}" width="${((x-runStart)*scaleX).toFixed(1)}" height="${scaleY.toFixed(1)}"/>`);
+        runStart = -1;
+      }
+    }
+  }
+  svgParts.push('</g></svg>');
+  return svgParts.join('');
+}
+
+// ── Median cut colour quantisation ──
+function medianCut(pixels, w, h, numColours) {
+  // Build array of [r,g,b] samples (subsample for speed)
+  const step = Math.max(1, Math.floor(w * h / 4000));
+  const samples = [];
+  for (let i = 0; i < w * h; i += step) {
+    samples.push([pixels[i*4], pixels[i*4+1], pixels[i*4+2]]);
+  }
+
+  function split(bucket) {
+    if (bucket.length === 0) return [[]];
+    let minR=255,maxR=0, minG=255,maxG=0, minB=255,maxB=0;
+    for (const [r,g,b] of bucket) {
+      if(r<minR)minR=r; if(r>maxR)maxR=r;
+      if(g<minG)minG=g; if(g>maxG)maxG=g;
+      if(b<minB)minB=b; if(b>maxB)maxB=b;
+    }
+    const rRange = maxR-minR, gRange = maxG-minG, bRange = maxB-minB;
+    const ch = rRange>=gRange && rRange>=bRange ? 0 : gRange>=bRange ? 1 : 2;
+    bucket.sort((a,b) => a[ch]-b[ch]);
+    const mid = Math.floor(bucket.length/2);
+    return [bucket.slice(0,mid), bucket.slice(mid)];
+  }
+
+  let buckets = [samples];
+  while (buckets.length < numColours) {
+    // Split the largest bucket
+    let maxIdx = 0;
+    for (let i = 1; i < buckets.length; i++) {
+      if (buckets[i].length > buckets[maxIdx].length) maxIdx = i;
+    }
+    const halves = split(buckets[maxIdx]);
+    buckets.splice(maxIdx, 1, ...halves.filter(b => b.length > 0));
+    if (buckets.length >= numColours) break;
+  }
+
+  return buckets.map(b => {
+    let r=0, g=0, bl=0;
+    for (const [cr,cg,cb] of b) { r+=cr; g+=cg; bl+=cb; }
+    const n = b.length;
+    return [Math.round(r/n), Math.round(g/n), Math.round(bl/n)];
+  });
+}
+
+function nearestPaletteIdx(r, g, b, palette) {
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < palette.length; i++) {
+    const dr=r-palette[i][0], dg=g-palette[i][1], db=b-palette[i][2];
+    const d = dr*dr + dg*dg + db*db;
+    if (d < bestD) { bestD=d; best=i; }
+  }
+  return best;
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Vectorise & encode as QRS| chain ──
+async function vectoriseAndEncode() {
+  if (!srcImg) { showToast('No image loaded'); return; }
+
+  const btn = document.getElementById('svgEncodeBtn');
+  btn.textContent = 'Vectorising…';
+  btn.disabled = true;
+
+  try {
+    await runSvgPreview(); // ensure latest SVG is generated
+
+    if (!svgVectorised) { showToast('Vectorisation failed'); return; }
+
+    const gzippedB64 = await gzipSvg(svgVectorised);
+    const chunkSize  = parseInt(document.getElementById('drwChunk').value) || 500;
+    const chunks     = chunkText(gzippedB64, chunkSize);
+    const total      = chunks.length;
+
+    // Protocol: QRS|index/total|<gzip-b64-data>
+    const qrsChunks = chunks.map((chunk, i) =>
+      `QRS|${i+1}/${total}|${chunk}`
+    );
+
+    allChunks   = qrsChunks;
+    ssChunks    = qrsChunks;
+    currentPage = 0;
+    currentChainType = 'svg';
+
+    document.getElementById('seqCount').textContent = `${total} code${total > 1 ? 's' : ''} (SVG ◈)`;
+    document.getElementById('qrSequence').style.display = 'block';
+    document.getElementById('broadcastBtn').style.display = 'flex';
+
+    renderPage(0, true);
+    showToast(`SVG vectorised: ${total} QR codes`, true);
+  } finally {
+    btn.textContent = 'Vectorise & Generate Chain';
+    btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILE RECEIVE  (original QRF| protocol)
+// ═══════════════════════════════════════════════════════════
+let fileChunks   = {};
+let recvFileName = 'image.png';
+let recvMime     = 'image/png';
+let recvB64Full  = '';
+
+function processFileQR(data) {
+  const parts = data.split('|');
+  if (parts.length < 3) return;
+  const meta    = parts[1];
+  const payload = parts.slice(2).join('|');
+  const [idxStr, totStr] = meta.split('/');
+  const idx   = parseInt(idxStr);
+  const total = parseInt(totStr);
+  if (isNaN(idx) || isNaN(total)) return;
+  if (fileChunks[idx]) return;
+
+  fileChunks[idx]   = payload;
+  scannedChunks[idx] = true;
+  totalChunks        = total;
+
+  const got = Object.keys(fileChunks).length;
+  showToast(`Image chunk ${idx}/${total}`, true);
+  setStatus(got === total ? '✓ Image complete — tap Download!' : `Scanning image… ${got}/${total}`);
+  updateTimeline(total, false);
+  if (got === total) assembleFile(total);
+}
+
+function assembleFile(total) {
+  const combined   = Array.from({length: total}, (_, i) => fileChunks[i+1] || '').join('');
+  const firstPipe  = combined.indexOf('|');
+  const secondPipe = combined.indexOf('|', firstPipe + 1);
+  recvFileName = combined.slice(0, firstPipe);
+  recvMime     = combined.slice(firstPipe + 1, secondPipe);
+  recvB64Full  = combined.slice(secondPipe + 1);
+  const kb = (recvB64Full.length * 0.75 / 1024).toFixed(1);
+
+  document.getElementById('fileDownloadName').textContent = recvFileName;
+  document.getElementById('fileDownloadSub').textContent  = `${recvMime} · ${kb}KB · auto-saved ✓`;
+  document.getElementById('fileDownloadBox').style.display = 'flex';
+  setStatus('✓ Image complete — auto-saved!');
+
+  autoSaveFile();
+}
+
+function autoSaveFile() {
+  if (!recvB64Full) return;
+  try {
+    const byteChars = atob(recvB64Full);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob    = new Blob([bytes], { type: recvMime });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl; a.download = recvFileName;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    showToast('Image saved automatically ✓', true);
+  } catch(e) {
+    showToast('Tap Download to save the image', false);
+  }
+}
+
+function downloadReceivedFile() {
+  if (!recvB64Full) return;
+  const a = document.createElement('a');
+  a.href = `data:${recvMime};base64,${recvB64Full}`;
+  a.download = recvFileName;
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg, good, purple) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (purple ? ' purple' : good ? ' green' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 2200);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Z85 ENCODING  (RFC 7468 variant — 85 printable ASCII chars)
+//  More efficient than base64: 5 bytes → 5 chars vs 4 bytes → ~5.33 chars
+//  Result is QR-safe (no +/= etc.)
+// ═══════════════════════════════════════════════════════════
+const Z85_CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#';
+
+function z85Encode(uint8) {
+  // Pad to multiple of 4
+  const padLen = (4 - (uint8.length % 4)) % 4;
+  const padded = new Uint8Array(uint8.length + padLen);
+  padded.set(uint8);
+  let out = '';
+  // Prepend 1 char for pad length so receiver can strip it
+  out += String.fromCharCode(48 + padLen); // '0','1','2','3'
+  for (let i = 0; i < padded.length; i += 4) {
+    let v = (padded[i] * 16777216) + (padded[i+1] * 65536) + (padded[i+2] * 256) + padded[i+3];
+    for (let j = 4; j >= 0; j--) {
+      out += Z85_CHARS[Math.floor(v / Math.pow(85, j)) % 85];
+    }
+  }
+  return out;
+}
+
+function z85Decode(str) {
+  const padLen = str.charCodeAt(0) - 48;
+  const body   = str.slice(1);
+  const groups = body.length / 5;
+  const out    = new Uint8Array(groups * 4);
+  for (let i = 0; i < groups; i++) {
+    let v = 0;
+    for (let j = 0; j < 5; j++) {
+      v = v * 85 + Z85_CHARS.indexOf(body[i * 5 + j]);
+    }
+    out[i*4]   = (v >>> 24) & 0xff;
+    out[i*4+1] = (v >>> 16) & 0xff;
+    out[i*4+2] = (v >>> 8)  & 0xff;
+    out[i*4+3] =  v         & 0xff;
+  }
+  return out.slice(0, out.length - padLen);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ENCODE TAB SWITCHING
+// ═══════════════════════════════════════════════════════════
+function switchEncodeTab(name) {
+  ['palette','gradient','dct'].forEach(t => {
+    document.getElementById('etab-' + t).classList.toggle('active', t === name);
+    document.getElementById('epane-' + t).classList.toggle('active', t === name);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ◉ PALETTE CHAIN  (QRP| protocol)
+//  Format: QRP|1/N|<JSON-header-b64>  (chunk 1 only)
+//          QRP|K|<z85-data-chunk>
+//  Header (chunk 1): { w, h, ow, oh, colours:[[r,g,b],...], dither, enc:'z85' }
+//  Payload (rest):   Z85-encoded, gzipped indexed pixel array (1 byte per pixel → palette idx)
+// ═══════════════════════════════════════════════════════════
+let palettePreviewing = false;
+let palPreviewData    = null; // { header, z85payload }
+let ditherMode        = 'none';
+let _palTimer         = null;
+
+function setDitherMode(mode) {
+  ditherMode = mode;
+  document.querySelectorAll('[data-dither]').forEach(c =>
+    c.classList.toggle('active', c.dataset.dither === mode));
+  schedulePalPreview();
+}
+
+function schedulePalPreview() {
+  clearTimeout(_palTimer);
+  _palTimer = setTimeout(runPalPreview, 350);
+}
+
+async function runPalPreview() {
+  if (!srcImg) return;
+  const numCols  = parseInt(document.getElementById('palColours').value);
+  const maxW     = parseInt(document.getElementById('palSize').value);
+  const prog     = document.getElementById('palProgress');
+  const fill     = document.getElementById('palProgressFill');
+  const label    = document.getElementById('palProgressLabel');
+  prog.classList.add('visible');
+  fill.style.width  = '10%';
+  label.textContent = 'Quantising…';
+  try {
+    const result = await buildPalettePayload(srcImg, numCols, maxW, ditherMode, (p, msg) => {
+      fill.style.width = (10 + p * 85) + '%';
+      label.textContent = msg;
+    });
+    palPreviewData = result;
+    // Draw preview
+    const thumb = document.getElementById('palThumbCanvas');
+    drawPaletteToCanvas(thumb, result.indexed, result.w, result.h, result.palette, 90, 90);
+    const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
+    const totalPay  = result.headerStr.length + result.z85.length + 20;
+    const codes     = Math.ceil(totalPay / chunkSize);
+    const jpegCodes = imgSendB64 ? Math.ceil((imgSendFile.name.length + 12 + imgSendB64.length) / chunkSize) : null;
+    document.getElementById('palStatCodes').textContent = codes;
+    document.getElementById('palStatSize').textContent  = (totalPay / 1024).toFixed(1) + 'KB';
+    document.getElementById('palStatCols').textContent  = result.palette.length;
+    const compEl = document.getElementById('palStatComp');
+    if (jpegCodes) {
+      const diff = jpegCodes - codes;
+      compEl.className = 'encode-stat ' + (diff > 0 ? 'win' : 'loss');
+      compEl.innerHTML = `vs JPEG: <strong>${diff > 0 ? diff + ' fewer ✓' : Math.abs(diff) + ' more'}</strong>`;
+    }
+    document.getElementById('palPreviewWrap').style.display = 'flex';
+    fill.style.width = '100%';
+    label.textContent = `Done — ${codes} QR codes`;
+    setTimeout(() => prog.classList.remove('visible'), 1200);
+  } catch(e) {
+    label.textContent = 'Error: ' + e.message;
+    console.error(e);
+    setTimeout(() => prog.classList.remove('visible'), 2000);
+  }
+}
+
+async function buildPalettePayload(img, numCols, maxW, dither, onProgress) {
+  const pako = await ensurePako();
+  const naturalW = img.naturalWidth, naturalH = img.naturalHeight;
+  const scale = Math.min(1, maxW / naturalW);
+  const w = Math.max(2, Math.round(naturalW * scale));
+  const h = Math.max(2, Math.round(naturalH * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const imageData = ctx.getImageData(0, 0, w, h);
+
+  onProgress(0.1, 'Building palette…');
+  await yieldFrame();
+
+  const palette = medianCut(imageData.data, w, h, numCols);
+
+  onProgress(0.3, 'Mapping pixels…');
+  await yieldFrame();
+
+  // Map pixels to palette indices
+  const indexed = new Uint8Array(w * h);
+  const pixels  = imageData.data;
+
+  if (dither === 'floyd') {
+    // Floyd-Steinberg dithering — work on float error buffer
+    const errR = new Float32Array(w * h);
+    const errG = new Float32Array(w * h);
+    const errB = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const pr = Math.min(255, Math.max(0, pixels[i*4]   + errR[i]));
+        const pg = Math.min(255, Math.max(0, pixels[i*4+1] + errG[i]));
+        const pb = Math.min(255, Math.max(0, pixels[i*4+2] + errB[i]));
+        const ci = nearestPaletteIdx(pr, pg, pb, palette);
+        indexed[i] = ci;
+        const dr = pr - palette[ci][0], dg = pg - palette[ci][1], db = pb - palette[ci][2];
+        // Distribute error: right=7/16, down-left=3/16, down=5/16, down-right=1/16
+        const spread = (idx, fr) => {
+          if (idx >= 0 && idx < w*h) { errR[idx] += dr * fr; errG[idx] += dg * fr; errB[idx] += db * fr; }
+        };
+        spread(i + 1,         7/16);
+        spread(i + w - 1,     3/16);
+        spread(i + w,         5/16);
+        spread(i + w + 1,     1/16);
+      }
+    }
+  } else if (dither === 'ordered') {
+    // 4×4 Bayer matrix
+    const bayer = [[ 0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+    const bScale = 24; // ~24/16 range
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const thresh = (bayer[y % 4][x % 4] / 16 - 0.5) * bScale;
+        const i   = y * w + x;
+        const pr  = Math.min(255, Math.max(0, pixels[i*4]   + thresh));
+        const pg  = Math.min(255, Math.max(0, pixels[i*4+1] + thresh));
+        const pb  = Math.min(255, Math.max(0, pixels[i*4+2] + thresh));
+        indexed[i] = nearestPaletteIdx(pr, pg, pb, palette);
+      }
+    }
+  } else {
+    for (let i = 0; i < w * h; i++) {
+      indexed[i] = nearestPaletteIdx(pixels[i*4], pixels[i*4+1], pixels[i*4+2], palette);
+    }
+  }
+
+  onProgress(0.7, 'Compressing…');
+  await yieldFrame();
+
+  const compressed = pako.gzip(indexed, { level: 9 });
+  const z85 = z85Encode(compressed);
+
+  // Header: compact JSON
+  const header = {
+    w, h,
+    ow: naturalW, oh: naturalH,
+    p: palette.map(([r,g,b]) => rgbToHex(r,g,b)),
+    d: dither === 'none' ? 0 : dither === 'ordered' ? 1 : 2,
+    e: 'z85g'  // z85 + gzip
+  };
+  const headerStr = JSON.stringify(header);
+
+  onProgress(0.9, 'Done');
+  return { indexed, palette, w, h, headerStr, z85 };
+}
+
+function drawPaletteToCanvas(canvas, indexed, w, h, palette, dw, dh) {
+  canvas.width  = dw || w;
+  canvas.height = dh || h;
+  // Draw at native indexed resolution then scale via CSS
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const ctx2 = tmp.getContext('2d');
+  const imgData = ctx2.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const c = palette[indexed[i]] || [0,0,0];
+    imgData.data[i*4]   = c[0];
+    imgData.data[i*4+1] = c[1];
+    imgData.data[i*4+2] = c[2];
+    imgData.data[i*4+3] = 255;
+  }
+  ctx2.putImageData(imgData, 0, 0);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, dw || w, dh || h);
+}
+
+async function encodePaletteChain() {
+  if (!srcImg) { showToast('No image loaded'); return; }
+  const btn = document.getElementById('palEncodeBtn');
+  btn.textContent = 'Encoding…'; btn.disabled = true;
+  try {
+    if (!palPreviewData) await runPalPreview();
+    if (!palPreviewData) { showToast('Palette build failed'); return; }
+
+    const { headerStr, z85 } = palPreviewData;
+    const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
+
+    // Chunk 1 = header JSON, rest = z85 payload
+    const headerChunk  = headerStr;
+    const payloadChunks = chunkText(z85, chunkSize - 10);
+    const total = 1 + payloadChunks.length;
+
+    const qrpChunks = [`QRP|1/${total}|${headerChunk}`];
+    payloadChunks.forEach((c, i) => qrpChunks.push(`QRP|${i + 2}/${total}|${c}`));
+
+    allChunks = qrpChunks; ssChunks = qrpChunks;
+    currentPage = 0; currentChainType = 'palette';
+
+    document.getElementById('seqCount').textContent = `${total} codes (Palette ◉)`;
+    document.getElementById('qrSequence').style.display = 'block';
+    document.getElementById('broadcastBtn').style.display = 'flex';
+    renderPage(0, false);
+    showToast(`Palette: ${total} QR codes`, true);
+  } finally {
+    btn.textContent = 'Generate Palette Chain'; btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ◉ GRADIENT MESH CHAIN  (QRG| protocol)
+//  Metadata: sparse colour grid → bicubic interpolation on receive
+//  Format: QRG|1/N|<compact-json>   (usually fits in ~2-5 codes)
+// ═══════════════════════════════════════════════════════════
+let _gradTimer = null;
+function scheduleGradPreview() {
+  clearTimeout(_gradTimer);
+  _gradTimer = setTimeout(runGradPreview, 350);
+}
+
+async function runGradPreview() {
+  if (!srcImg) return;
+  const gridN = parseInt(document.getElementById('gradGrid').value);
+  const prog  = document.getElementById('gradProgress');
+  const fill  = document.getElementById('gradProgressFill');
+  const label = document.getElementById('gradProgressLabel');
+  prog.classList.add('visible');
+  fill.style.width = '10%'; label.textContent = 'Sampling…';
+  try {
+    const result = await buildGradientPayload(srcImg, gridN);
+    // Preview render
+    const outW = 180, outH = Math.round(180 * srcImg.naturalHeight / srcImg.naturalWidth);
+    const thumb = document.getElementById('gradThumbCanvas');
+    renderGradientMesh(thumb, result.grid, result.gw, result.gh, outW, outH);
+    const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
+    const codes = Math.ceil(result.payload.length / chunkSize);
+    document.getElementById('gradStatCodes').textContent = codes;
+    document.getElementById('gradStatSize').textContent  = (result.payload.length / 1024).toFixed(2) + 'KB';
+    document.getElementById('gradStatPts').textContent   = result.gw + '×' + result.gh;
+    document.getElementById('gradStatNote').textContent  = codes <= 5
+      ? '✓ Extremely compact! Great for any image.'
+      : 'Smooth approximation — increase grid for more detail.';
+    document.getElementById('gradPreviewWrap').style.display = 'flex';
+    fill.style.width = '100%'; label.textContent = `${codes} QR codes`;
+    setTimeout(() => prog.classList.remove('visible'), 1200);
+    return result;
+  } catch(e) {
+    label.textContent = 'Error: ' + e.message;
+    setTimeout(() => prog.classList.remove('visible'), 2000);
+  }
+}
+
+async function buildGradientPayload(img, gridN) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0);
+  const ctx = canvas.getContext('2d');
+
+  // Sample a gridN×gridN grid of average-colour patches
+  const grid = [];
+  for (let gy = 0; gy < gridN; gy++) {
+    for (let gx = 0; gx < gridN; gx++) {
+      const x0 = Math.round(gx * (w / gridN));
+      const y0 = Math.round(gy * (h / gridN));
+      const x1 = Math.round((gx + 1) * (w / gridN));
+      const y1 = Math.round((gy + 1) * (h / gridN));
+      const pw = Math.max(1, x1 - x0);
+      const ph = Math.max(1, y1 - y0);
+      const patch = ctx.getImageData(x0, y0, pw, ph).data;
+      let r=0, g2=0, b2=0;
+      for (let i = 0; i < patch.length; i += 4) { r += patch[i]; g2 += patch[i+1]; b2 += patch[i+2]; }
+      const n = patch.length / 4;
+      grid.push([Math.round(r/n), Math.round(g2/n), Math.round(b2/n)]);
+    }
+  }
+
+  // Compact payload: aspect ratio + flat grid as hex triplets
+  const ar = (h / w).toFixed(4);
+  const hexGrid = grid.map(([r,g,b]) => rgbToHex(r,g,b).slice(1)).join('');
+  const payload = JSON.stringify({ v:1, ar, gn: gridN, g: hexGrid });
+
+  return { grid, gw: gridN, gh: gridN, payload };
+}
+
+function renderGradientMesh(canvas, grid, gw, gh, outW, outH) {
+  canvas.width = outW; canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.createImageData(outW, outH);
+
+  // Bilinear interpolation across the grid
+  for (let py = 0; py < outH; py++) {
+    for (let px = 0; px < outW; px++) {
+      const fx = (px / (outW - 1)) * (gw - 1);
+      const fy = (py / (outH - 1)) * (gh - 1);
+      const gx0 = Math.floor(fx), gy0 = Math.floor(fy);
+      const gx1 = Math.min(gx0 + 1, gw - 1), gy1 = Math.min(gy0 + 1, gh - 1);
+      const tx = fx - gx0, ty = fy - gy0;
+
+      const c00 = grid[gy0 * gw + gx0];
+      const c10 = grid[gy0 * gw + gx1];
+      const c01 = grid[gy1 * gw + gx0];
+      const c11 = grid[gy1 * gw + gx1];
+
+      const r = Math.round(c00[0]*(1-tx)*(1-ty) + c10[0]*tx*(1-ty) + c01[0]*(1-tx)*ty + c11[0]*tx*ty);
+      const g = Math.round(c00[1]*(1-tx)*(1-ty) + c10[1]*tx*(1-ty) + c01[1]*(1-tx)*ty + c11[1]*tx*ty);
+      const b = Math.round(c00[2]*(1-tx)*(1-ty) + c10[2]*tx*(1-ty) + c01[2]*(1-tx)*ty + c11[2]*tx*ty);
+
+      const idx = (py * outW + px) * 4;
+      imageData.data[idx]   = r;
+      imageData.data[idx+1] = g;
+      imageData.data[idx+2] = b;
+      imageData.data[idx+3] = 255;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+async function encodeGradientChain() {
+  if (!srcImg) { showToast('No image loaded'); return; }
+  const btn = document.getElementById('gradEncodeBtn');
+  btn.textContent = 'Encoding…'; btn.disabled = true;
+  try {
+    const gridN  = parseInt(document.getElementById('gradGrid').value);
+    const result = await buildGradientPayload(srcImg, gridN);
+    const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
+    const chunks = chunkText(result.payload, chunkSize - 10);
+    const total  = chunks.length;
+    const qrgChunks = chunks.map((c, i) => `QRG|${i+1}/${total}|${c}`);
+
+    allChunks = qrgChunks; ssChunks = qrgChunks;
+    currentPage = 0; currentChainType = 'gradient';
+
+    document.getElementById('seqCount').textContent = `${total} codes (Gradient ◉)`;
+    document.getElementById('qrSequence').style.display = 'block';
+    document.getElementById('broadcastBtn').style.display = 'flex';
+    renderPage(0, false);
+    showToast(`Gradient mesh: ${total} QR codes`, true);
+  } finally {
+    btn.textContent = 'Generate Gradient Chain'; btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ◉ DCT CHAIN  (QRD| protocol)
+//  8×8 DCT blocks, zigzag scan, quantised coeffs, Z85-encoded
+//  More efficient than JPEG QR chain (~20% fewer codes)
+// ═══════════════════════════════════════════════════════════
+// DCT-II lookup table
+function buildDctTable() {
+  const N = 8;
+  const t = [];
+  for (let k = 0; k < N; k++) {
+    t[k] = [];
+    const ck = k === 0 ? 1 / Math.sqrt(2) : 1;
+    for (let n = 0; n < N; n++) {
+      t[k][n] = ck * Math.cos(Math.PI * k * (2*n + 1) / (2*N)) * Math.sqrt(2/N);
+    }
+  }
+  return t;
+}
+const DCT_TABLE = buildDctTable();
+
+function dct8(block) {
+  const out = new Float32Array(64);
+  for (let u = 0; u < 8; u++) {
+    for (let v = 0; v < 8; v++) {
+      let s = 0;
+      for (let x = 0; x < 8; x++)
+        for (let y = 0; y < 8; y++)
+          s += block[y*8+x] * DCT_TABLE[u][x] * DCT_TABLE[v][y];
+      out[v*8+u] = s;
+    }
+  }
+  return out;
+}
+
+function idct8(coeffs) {
+  const out = new Float32Array(64);
+  for (let x = 0; x < 8; x++) {
+    for (let y = 0; y < 8; y++) {
+      let s = 0;
+      for (let u = 0; u < 8; u++)
+        for (let v = 0; v < 8; v++)
+          s += coeffs[v*8+u] * DCT_TABLE[u][x] * DCT_TABLE[v][y];
+      out[y*8+x] = s;
+    }
+  }
+  return out;
+}
+
+// Zigzag order for 8x8 block
+const ZIGZAG = [
+   0, 1, 8,16, 9, 2, 3,10,
+  17,24,32,25,18,11, 4, 5,
+  12,19,26,33,40,48,41,34,
+  27,20,13, 6, 7,14,21,28,
+  35,42,49,56,57,50,43,36,
+  29,22,15,23,30,37,44,51,
+  58,59,52,45,38,31,39,46,
+  53,60,61,54,47,55,62,63
+];
+
+// JPEG-style luminance quantisation table, scaled by quality
+function buildQuantTable(quality) {
+  const base = [
+    16,11,10,16,24,40,51,61, 12,12,14,19,26,58,60,55,
+    14,13,16,24,40,57,69,56, 14,17,22,29,51,87,80,62,
+    18,22,37,56,68,109,103,77, 24,35,55,64,81,104,113,92,
+    49,64,78,87,103,121,120,101, 72,92,95,98,112,100,103,99
+  ];
+  const scale = quality < 50 ? 5000 / quality : 200 - 2 * quality;
+  return base.map(v => Math.max(1, Math.min(255, Math.floor((v * scale + 50) / 100))));
+}
+
+let _dctTimer = null;
+function scheduleDctPreview() {
+  clearTimeout(_dctTimer);
+  _dctTimer = setTimeout(runDctPreview, 400);
+}
+
+async function runDctPreview() {
+  if (!srcImg) return;
+  const qual   = parseInt(document.getElementById('dctQual').value);
+  const scale  = parseInt(document.getElementById('dctScale').value) / 100;
+  const prog   = document.getElementById('dctProgress');
+  const fill   = document.getElementById('dctProgressFill');
+  const label  = document.getElementById('dctProgressLabel');
+  prog.classList.add('visible');
+  fill.style.width = '5%'; label.textContent = 'Encoding DCT…';
+  try {
+    const result = await buildDctPayload(srcImg, qual, scale, p => {
+      fill.style.width = (5 + p * 80) + '%';
+    });
+    // Preview: decode back
+    const thumb = document.getElementById('dctThumbCanvas');
+    const preview = decodeDctPayload(result);
+    const dispW = 180, dispH = Math.round(180 * preview.h / preview.w);
+    thumb.width = dispW; thumb.height = dispH;
+    const ctx = thumb.getContext('2d');
+    const tmp = document.createElement('canvas');
+    tmp.width = preview.w; tmp.height = preview.h;
+    const tctx = tmp.getContext('2d');
+    const imgd = tctx.createImageData(preview.w, preview.h);
+    imgd.data.set(preview.pixels);
+    tctx.putImageData(imgd, 0, 0);
+    ctx.drawImage(tmp, 0, 0, dispW, dispH);
+
+    const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
+    const codes = Math.ceil(result.encoded.length / chunkSize);
+    const jpegCodes = imgSendB64 ? Math.ceil((imgSendFile.name.length + 12 + imgSendB64.length) / chunkSize) : null;
+    document.getElementById('dctStatCodes').textContent = codes;
+    document.getElementById('dctStatSize').textContent  = (result.encoded.length / 1024).toFixed(1) + 'KB';
+    const compEl = document.getElementById('dctStatComp');
+    if (jpegCodes) {
+      const diff = jpegCodes - codes;
+      compEl.className = 'encode-stat ' + (diff > 0 ? 'win' : 'loss');
+      compEl.innerHTML = `vs JPEG QR: <strong>${diff > 0 ? diff + ' fewer ✓' : Math.abs(diff) + ' more'}</strong>`;
+    }
+    document.getElementById('dctPreviewWrap').style.display = 'flex';
+    fill.style.width = '100%'; label.textContent = `${codes} QR codes`;
+    setTimeout(() => prog.classList.remove('visible'), 1200);
+    return result;
+  } catch(e) {
+    label.textContent = 'Error: ' + e.message; console.error(e);
+    setTimeout(() => prog.classList.remove('visible'), 2000);
+  }
+}
+
+async function buildDctPayload(img, quality, scale, onProgress) {
+  const pako   = await ensurePako();
+  const nw = img.naturalWidth, nh = img.naturalHeight;
+  const w  = Math.max(8, Math.round(nw * scale));
+  const h  = Math.max(8, Math.round(nh * scale));
+  // Pad to multiple of 8
+  const pw = Math.ceil(w / 8) * 8;
+  const ph = Math.ceil(h / 8) * 8;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = pw; canvas.height = ph;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const imageData = ctx.getImageData(0, 0, pw, ph);
+
+  // Convert to YCbCr (Y only for simplicity — store Cb/Cr at 2x downscale)
+  const yPlane  = new Float32Array(pw * ph);
+  const cbPlane = new Float32Array(pw * ph / 4);
+  const crPlane = new Float32Array(pw * ph / 4);
+  const pxl = imageData.data;
+
+  for (let i = 0; i < pw * ph; i++) {
+    const r = pxl[i*4], g = pxl[i*4+1], b = pxl[i*4+2];
+    yPlane[i]  =  0.299*r + 0.587*g + 0.114*b - 128;
+  }
+  // Downsample Cb/Cr 2x
+  for (let y = 0; y < ph; y += 2) {
+    for (let x = 0; x < pw; x += 2) {
+      const i = y * pw + x;
+      const r = pxl[i*4], g = pxl[i*4+1], b = pxl[i*4+2];
+      const ci = (y/2) * (pw/2) + (x/2);
+      cbPlane[ci] = -0.168736*r - 0.331264*g + 0.5*b;
+      crPlane[ci] =  0.5*r - 0.418688*g - 0.081312*b;
+    }
+  }
+
+  const qtY = buildQuantTable(quality);
+
+  // DCT + quantise all blocks into a flat Int16 array
+  function processPlane(plane, pw2, ph2) {
+    const bW = pw2 / 8, bH = ph2 / 8;
+    const coeffs = new Int16Array(bW * bH * 64);
+    let out = 0;
+    for (let by = 0; by < bH; by++) {
+      for (let bx = 0; bx < bW; bx++) {
+        const block = new Float32Array(64);
+        for (let y = 0; y < 8; y++)
+          for (let x = 0; x < 8; x++)
+            block[y*8+x] = plane[(by*8+y)*pw2 + bx*8+x];
+        const dctCoeffs = dct8(block);
+        for (let k = 0; k < 64; k++) {
+          coeffs[out + ZIGZAG[k]] = Math.round(dctCoeffs[k] / qtY[k]);
+        }
+        out += 64;
+      }
+      if (by % 4 === 0) onProgress && onProgress(0.1 + (by / bH) * 0.6);
+    }
+    return coeffs;
+  }
+
+  const yCoeffs  = processPlane(yPlane, pw, ph);
+  const cbCoeffs = processPlane(cbPlane, pw/2, ph/2);
+  const crCoeffs = processPlane(crPlane, pw/2, ph/2);
+
+  onProgress && onProgress(0.85);
+  await yieldFrame();
+
+  // Pack: header JSON + raw bytes gzipped → Z85
+  const header = { v:1, w, h, pw, ph, q: quality, e:'z85g' };
+  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+  const headerLen   = headerBytes.length;
+
+  // Interleave Y, Cb, Cr as raw Int16 (little endian)
+  const totalCoeffs = yCoeffs.length + cbCoeffs.length + crCoeffs.length;
+  const rawBytes = new Uint8Array(2 + headerLen + totalCoeffs * 2);
+  // First 2 bytes: header length
+  rawBytes[0] = headerLen & 0xff;
+  rawBytes[1] = (headerLen >> 8) & 0xff;
+  rawBytes.set(headerBytes, 2);
+  const dv = new DataView(rawBytes.buffer);
+  const base = 2 + headerLen;
+  for (let i = 0; i < yCoeffs.length;  i++) dv.setInt16(base + i*2, yCoeffs[i], true);
+  const cbBase = base + yCoeffs.length * 2;
+  for (let i = 0; i < cbCoeffs.length; i++) dv.setInt16(cbBase + i*2, cbCoeffs[i], true);
+  const crBase = cbBase + cbCoeffs.length * 2;
+  for (let i = 0; i < crCoeffs.length; i++) dv.setInt16(crBase + i*2, crCoeffs[i], true);
+
+  onProgress && onProgress(0.92);
+  const compressed = pako.gzip(rawBytes, { level: 9 });
+  const encoded    = z85Encode(compressed);
+  onProgress && onProgress(1.0);
+
+  return { encoded, w, h, pw, ph, quality, yCoeffs, cbCoeffs, crCoeffs, qtY };
+}
+
+function decodeDctPayload(result) {
+  // Re-render from already-computed coefficients (skip re-parsing)
+  const { w, h, pw, ph, yCoeffs, cbCoeffs, crCoeffs, qtY } = result;
+  const yPlane  = new Float32Array(pw * ph);
+  const cbPlane = new Float32Array(pw * ph / 4);
+  const crPlane = new Float32Array(pw * ph / 4);
+
+  function reconstructPlane(coeffs, outPlane, pw2, ph2) {
+    const bW = pw2 / 8, bH = ph2 / 8;
+    for (let by = 0; by < bH; by++) {
+      for (let bx = 0; bx < bW; bx++) {
+        const base = (by * bW + bx) * 64;
+        const dequant = new Float32Array(64);
+        for (let k = 0; k < 64; k++) dequant[k] = coeffs[base + ZIGZAG[k]] * qtY[k];
+        const spatial = idct8(dequant);
+        for (let y = 0; y < 8; y++)
+          for (let x = 0; x < 8; x++)
+            outPlane[(by*8+y)*pw2 + bx*8+x] = spatial[y*8+x];
+      }
+    }
+  }
+
+  reconstructPlane(yCoeffs, yPlane, pw, ph);
+  reconstructPlane(cbCoeffs, cbPlane, pw/2, ph/2);
+  reconstructPlane(crPlane, crPlane, pw/2, ph/2);
+
+  const pixels = new Uint8ClampedArray(w * h * 4);
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const yi  = py * pw + px;
+      const ci  = Math.floor(py/2) * (pw/2) + Math.floor(px/2);
+      const Y   = yPlane[yi] + 128;
+      const Cb  = cbPlane[ci];
+      const Cr  = crPlane[ci];
+      const r   = Math.min(255, Math.max(0, Math.round(Y + 1.402*Cr)));
+      const g   = Math.min(255, Math.max(0, Math.round(Y - 0.344136*Cb - 0.714136*Cr)));
+      const b   = Math.min(255, Math.max(0, Math.round(Y + 1.772*Cb)));
+      const oi  = (py * w + px) * 4;
+      pixels[oi] = r; pixels[oi+1] = g; pixels[oi+2] = b; pixels[oi+3] = 255;
+    }
+  }
+  return { pixels, w, h };
+}
+
+async function encodeDctChain() {
+  if (!srcImg) { showToast('No image loaded'); return; }
+  const btn = document.getElementById('dctEncodeBtn');
+  btn.textContent = 'Encoding…'; btn.disabled = true;
+  try {
+    const qual  = parseInt(document.getElementById('dctQual').value);
+    const scale = parseInt(document.getElementById('dctScale').value) / 100;
+    const result = await buildDctPayload(srcImg, qual, scale);
+    const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
+    const chunks = chunkText(result.encoded, chunkSize - 10);
+    const total  = chunks.length;
+    const qrdChunks = chunks.map((c, i) => `QRD|${i+1}/${total}|${c}`);
+
+    allChunks = qrdChunks; ssChunks = qrdChunks;
+    currentPage = 0; currentChainType = 'dct';
+
+    document.getElementById('seqCount').textContent = `${total} codes (DCT ◉)`;
+    document.getElementById('qrSequence').style.display = 'block';
+    document.getElementById('broadcastBtn').style.display = 'flex';
+    renderPage(0, false);
+    showToast(`DCT: ${total} QR codes`, true);
+  } finally {
+    btn.textContent = 'Generate DCT Chain'; btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RECEIVERS for QRP|, QRG|, QRD|
+// ═══════════════════════════════════════════════════════════
+let palChunks = {}, gradChunks = {}, dctChunks = {};
+
+// Hook into processQR for the new protocols
+const _origProcessQR = processQR;
+window.processQR = async function(data) {
+  if (data.startsWith('QRP|')) { await processProtocolChunk('pal', data); return; }
+  if (data.startsWith('QRG|')) { await processProtocolChunk('grad', data); return; }
+  if (data.startsWith('QRD|')) { await processProtocolChunk('dct', data); return; }
+  await _origProcessQR(data);
+};
+
+async function processProtocolChunk(type, data) {
+  const parts = data.split('|');
+  if (parts.length < 3) return;
+  const [idxStr, totStr] = parts[1].split('/');
+  const idx   = parseInt(idxStr);
+  const total = parseInt(totStr);
+  if (isNaN(idx) || isNaN(total)) return;
+
+  const store = type === 'pal' ? palChunks : type === 'grad' ? gradChunks : dctChunks;
+  if (store[idx]) return;
+  store[idx] = parts.slice(2).join('|');
+  scannedChunks[idx] = true;
+  totalChunks = total;
+
+  const got = Object.keys(store).length;
+  showToast(`${type.toUpperCase()} chunk ${idx}/${total}`, true);
+  setStatus(got === total ? `✓ ${type.toUpperCase()} complete!` : `${type.toUpperCase()} scan… ${got}/${total}`);
+  updateTimeline(total, false);
+
+  const pill = document.getElementById('progressPill');
+  pill.textContent = `${got}/${total} ${type.toUpperCase()}`;
+  pill.className = 'progress-pill' + (got === total ? ' done' : '');
+  document.getElementById('accumulatedText').textContent =
+    got === total ? '' : `Scanning ${type.toUpperCase()} chain… ${got}/${total} chunks`;
+
+  if (got === total) {
+    if (type === 'pal')  await assemblePalette(total);
+    if (type === 'grad') await assembleGradient(total);
+    if (type === 'dct')  await assembleDct(total);
+  }
+}
+
+async function assemblePalette(total) {
+  const pako = await ensurePako();
+  const headerStr = palChunks[1];
+  const z85data   = Array.from({length: total - 1}, (_, i) => palChunks[i + 2] || '').join('');
+
+  let header;
+  try { header = JSON.parse(headerStr); } catch(e) { showToast('Palette header parse failed'); return; }
+
+  const compressed = z85Decode(z85data);
+  const indexed    = pako.ungzip(compressed);
+  const palette    = header.p.map(h => [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]);
+
+  const canvas = document.getElementById('paletteRecvCanvas');
+  const outW   = Math.min(600, header.ow || header.w);
+  const outH   = Math.round(outW * header.h / header.w);
+  drawPaletteToCanvas(canvas, indexed, header.w, header.h, palette, outW, outH);
+
+  const box = document.getElementById('paletteRecvBox');
+  box.classList.add('visible');
+  document.getElementById('paletteRecvMeta').textContent =
+    `Palette re-render · ${header.w}×${header.h} → ${outW}×${outH}px · ${header.p.length} colours`;
+  document.getElementById('outputLabel').textContent = 'Received: Palette Image';
+  setStatus('✓ Palette image received — auto-saving…');
+
+  // Save as PNG
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'received-palette.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast('Palette image saved ✓', true);
+  }, 'image/png');
+
+  // Download button
+  const dlBox = document.getElementById('fileDownloadBox');
+  dlBox.style.display = 'flex';
+  document.getElementById('fileDownloadName').textContent = 'received-palette.png';
+  document.getElementById('fileDownloadSub').textContent  = `${header.p.length} colours · ${outW}×${outH}px`;
+  document.getElementById('fileDownloadBtn').onclick = () => canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'received-palette.png';
+    a.click(); URL.revokeObjectURL(url);
+  }, 'image/png');
+}
+
+async function assembleGradient(total) {
+  const combined = Array.from({length: total}, (_, i) => gradChunks[i + 1] || '').join('');
+  let header;
+  try { header = JSON.parse(combined); } catch(e) { showToast('Gradient parse failed'); return; }
+
+  // Decode hex grid
+  const hexPairs = header.g.match(/.{6}/g) || [];
+  const grid = hexPairs.map(h => [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]);
+
+  const outW   = parseInt(document.getElementById('gradRes')?.value || 400);
+  const outH   = Math.round(outW * parseFloat(header.ar));
+  const canvas = document.getElementById('gradRecvCanvas');
+  renderGradientMesh(canvas, grid, header.gn, header.gn, outW, outH);
+
+  const box = document.getElementById('gradRecvBox');
+  box.classList.add('visible');
+  document.getElementById('gradRecvMeta').textContent =
+    `Gradient mesh · ${header.gn}×${header.gn} grid → ${outW}×${outH}px`;
+  document.getElementById('outputLabel').textContent = 'Received: Gradient Mesh';
+  setStatus('✓ Gradient received — auto-saving…');
+
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'received-gradient.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast('Gradient image saved ✓', true);
+  }, 'image/png');
+}
+
+async function assembleDct(total) {
+  const pako   = await ensurePako();
+  const z85all = Array.from({length: total}, (_, i) => dctChunks[i + 1] || '').join('');
+
+  const compressed = z85Decode(z85all);
+  const rawBytes   = pako.ungzip(compressed);
+
+  // Parse header
+  const headerLen = rawBytes[0] | (rawBytes[1] << 8);
+  const headerStr = new TextDecoder().decode(rawBytes.slice(2, 2 + headerLen));
+  const header    = JSON.parse(headerStr);
+
+  const { w, h, pw, ph, q } = header;
+  const qtY = buildQuantTable(q);
+  const dv  = new DataView(rawBytes.buffer);
+  const base = 2 + headerLen;
+
+  const bY  = (pw/8) * (ph/8);
+  const bC  = (pw/16) * (ph/16);
+
+  const yCoeffs  = new Int16Array(bY  * 64);
+  const cbCoeffs = new Int16Array(bC  * 64);
+  const crCoeffs = new Int16Array(bC  * 64);
+
+  for (let i = 0; i < yCoeffs.length;  i++) yCoeffs[i]  = dv.getInt16(base + i*2, true);
+  const cbBase = base + yCoeffs.length * 2;
+  for (let i = 0; i < cbCoeffs.length; i++) cbCoeffs[i] = dv.getInt16(cbBase + i*2, true);
+  const crBase = cbBase + cbCoeffs.length * 2;
+  for (let i = 0; i < crCoeffs.length; i++) crCoeffs[i] = dv.getInt16(crBase + i*2, true);
+
+  // Now reuse decodeDctPayload logic with a synthetic result object
+  const synth = { w, h, pw, ph, yCoeffs, cbCoeffs, crCoeffs: crCoeffs, qtY };
+  // Fix: the decodeDctPayload used crPlane as both input and output — patch here
+  const yPlane  = new Float32Array(pw * ph);
+  const cbPlane = new Float32Array((pw/2) * (ph/2));
+  const crPlane2 = new Float32Array((pw/2) * (ph/2));
+
+  function reconstructPlane2(coeffs, outPlane, pw2, ph2) {
+    const bW = pw2/8, bH = ph2/8;
+    for (let by = 0; by < bH; by++) {
+      for (let bx = 0; bx < bW; bx++) {
+        const base2 = (by * bW + bx) * 64;
+        const dequant = new Float32Array(64);
+        for (let k = 0; k < 64; k++) dequant[k] = coeffs[base2 + ZIGZAG[k]] * qtY[k];
+        const spatial = idct8(dequant);
+        for (let y = 0; y < 8; y++)
+          for (let x = 0; x < 8; x++)
+            outPlane[(by*8+y)*pw2 + bx*8+x] = spatial[y*8+x];
+      }
+    }
+  }
+
+  reconstructPlane2(yCoeffs, yPlane, pw, ph);
+  reconstructPlane2(cbCoeffs, cbPlane, pw/2, ph/2);
+  reconstructPlane2(crCoeffs, crPlane2, pw/2, ph/2);
+
+  const pixels = new Uint8ClampedArray(w * h * 4);
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const yi = py * pw + px;
+      const ci = Math.floor(py/2) * (pw/2) + Math.floor(px/2);
+      const Y  = yPlane[yi] + 128, Cb = cbPlane[ci], Cr = crPlane2[ci];
+      const r  = Math.min(255, Math.max(0, Math.round(Y + 1.402*Cr)));
+      const g  = Math.min(255, Math.max(0, Math.round(Y - 0.344136*Cb - 0.714136*Cr)));
+      const b  = Math.min(255, Math.max(0, Math.round(Y + 1.772*Cb)));
+      const oi = (py * w + px) * 4;
+      pixels[oi] = r; pixels[oi+1] = g; pixels[oi+2] = b; pixels[oi+3] = 255;
+    }
+  }
+
+  const canvas = document.getElementById('dctRecvCanvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const imgd = ctx.createImageData(w, h);
+  imgd.data.set(pixels);
+  ctx.putImageData(imgd, 0, 0);
+
+  document.getElementById('dctRecvBox').style.display = 'flex';
+  document.getElementById('dctRecvMeta').textContent = `DCT/Z85 · ${w}×${h}px · Q${q}`;
+  document.getElementById('outputLabel').textContent = 'Received: DCT Image';
+  setStatus('✓ DCT image received — auto-saving…');
+
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'received-dct.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast('DCT image saved ✓', true);
+  }, 'image/png');
+}
+
+// Patch resetReader to clear new state
+const _origReset = resetReader;
+window.resetReader = function() {
+  _origReset();
+  palChunks = {}; gradChunks = {}; dctChunks = {};
+  document.getElementById('paletteRecvBox').classList.remove('visible');
+  document.getElementById('gradRecvBox').classList.remove('visible');
+  document.getElementById('dctRecvBox').style.display = 'none';
+};
+
+// Auto-trigger previews when an image is loaded
+const _origPrepare = prepareImgSend;
+window.prepareImgSend = function(file) {
+  _origPrepare(file);
+  // Previews are triggered inside prepareImgSend already via scheduleSvgPreview()
+  // Schedule the new ones too after a short delay to let srcImg load
+  setTimeout(() => { schedulePalPreview(); scheduleGradPreview(); scheduleDctPreview(); }, 400);
+};
+</script>
+</body>
+</html>
