@@ -457,8 +457,10 @@
   .read-layout { display: flex; flex-direction: column; gap: 20px; }
   .scanner-box { border: 2px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #111; position: relative; }
   #reader { width: 100%; min-height: 260px; }
-  #reader video { width: 100% !important; height: auto !important; max-height: 320px; object-fit: cover; }
-  .camera-start { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; gap: 14px; background: #111; min-height: 200px; }
+  #reader video { width: 100% !important; height: auto !important; max-height: 320px; object-fit: cover;
+    will-change: transform; /* own compositor layer — no repaints from JS */ }
+  .scanner-box { border: 2px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #111;
+    position: relative; touch-action: none; /* prevent scroll hijack while scanning */ }
   .camera-start p { color: #aaa; font-size: 12px; text-align: center; letter-spacing: 0.04em; }
   .scanner-status { background: rgba(0,0,0,0.7); color: white; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 14px; text-align: center; }
 
@@ -539,11 +541,7 @@
     text-align: center;
   }
 
-  .flash-new { animation: flashNew 0.6s ease; }
-  @keyframes flashNew {
-    0% { background: #fffde0; }
-    100% { background: white; }
-  }
+  .flash-new { /* removed — forced reflow on every scan hurts mobile perf */ }
 
   /* ── SCAN TIMELINE ── */
   .tl-wrap {
@@ -1900,14 +1898,15 @@ async function startCamera() {
       {
         onDecodeError: () => {},
         preferredCamera: 'environment',
-        highlightScanRegion: true,
+        highlightScanRegion: false,   // overlay canvas costs compositing every frame
         highlightCodeOutline: false,
         returnDetailedScanResult: true,
+        // Centre 60%, downscale to 300px — plenty for QR, much faster on mobile
         calculateScanRegion: (v) => {
-          const s = Math.round(Math.min(v.videoWidth, v.videoHeight) * 0.7);
+          const s = Math.round(Math.min(v.videoWidth, v.videoHeight) * 0.6);
           const x = Math.round((v.videoWidth  - s) / 2);
           const y = Math.round((v.videoHeight - s) / 2);
-          return { x, y, width: s, height: s, downScaledWidth: 400, downScaledHeight: 400 };
+          return { x, y, width: s, height: s, downScaledWidth: 300, downScaledHeight: 300 };
         },
       }
     );
@@ -1925,10 +1924,13 @@ async function startCamera() {
   }
 }
 
+// Track frontier incrementally instead of Math.max(...array) every scan
+let _frontier = 0;
+
 async function processQR(data) {
   // Route to correct handler by protocol prefix
   if (data.startsWith('QRF|')) { processFileQR(data); return; }
-  if (data.startsWith('QRS|')) { processSvgQR(data); return; }   // NEW
+  if (data.startsWith('QRS|')) { processSvgQR(data); return; }
   if (!data.startsWith('QRC|')) return;
 
   const parts = data.split('|');
@@ -1957,32 +1959,183 @@ async function processQR(data) {
 
   if (isNaN(idx) || !total) return;
   if (scannedChunks[idx]) {
+    // Already have it — just update status text, no DOM thrash
     if (lastScanned !== idx) {
       lastScanned = idx;
-      setStatus(`Code ${idx}/${total} already scanned`);
+      _statusEl().textContent = `${idx}/${total} dup`;
     }
     return;
   }
 
   lastScanned = idx;
   scannedChunks[idx] = payload;
+  if (idx > _frontier) _frontier = idx;
 
-  setTimeout(async () => {
-    await updateTextDisplay();
-    updateTimeline(total, false);
+  const gotCount = Object.keys(scannedChunks).length;
 
-    const now = Date.now();
-    if (!processQR._lastToast || now - processQR._lastToast > 600) {
-      showToast(`Code ${idx}/${total} scanned`, true);
-      processQR._lastToast = now;
+  // Update status bar immediately — single text write, no layout
+  _statusEl().textContent = gotCount === total
+    ? `✓ All ${total} scanned!`
+    : `${gotCount}/${total}`;
+
+  // Update progress pill — single className + text write
+  const pill = document.getElementById('progressPill');
+  pill.textContent = `${gotCount}/${total}`;
+  pill.className   = 'progress-pill' + (gotCount === total ? ' done' : '');
+
+  // Timeline: only update the one cell that just changed + frontier
+  _updateTimelineCell(idx, total, _frontier);
+
+  // Throttle the expensive work: text display + missing chips
+  _scheduleHeavyUpdate(total, gotCount);
+
+  if (gotCount === total) _onScanComplete(total);
+}
+
+// ── Cached DOM refs — avoid getElementById on every scan ──
+let _statusElCache = null;
+function _statusEl() {
+  return _statusElCache || (_statusElCache = document.getElementById('scanStatus'));
+}
+
+// ── Single-cell timeline update (O(1) instead of O(n)) ──
+function _updateTimelineCell(idx, total, frontier) {
+  const wrap  = document.getElementById('tlWrap');
+  const strip = document.getElementById('tlStrip');
+  wrap.style.display = 'block';
+
+  // Grow strip if needed
+  while (strip.children.length < total) {
+    const i    = strip.children.length + 1;
+    const cell = document.createElement('div');
+    cell.className = 'tl-cell';
+    cell.dataset.frame = i;
+    cell.dataset.state = 'pending';
+    const num = document.createElement('div');
+    num.className = 'tl-cell-num';
+    num.textContent = i;
+    const bar = document.createElement('div');
+    bar.className = 'tl-cell-bar';
+    cell.appendChild(num);
+    cell.appendChild(bar);
+    strip.appendChild(cell);
+  }
+
+  // Update just the scanned cell
+  const cell = strip.children[idx - 1];
+  if (cell && cell.dataset.state !== 'got') {
+    cell.dataset.state = 'got';
+    cell.className = 'tl-cell got';
+    cell.onclick = () => {};
+    cell.title = `Frame ${idx} ✓`;
+  }
+
+  // Update the previous frontier cell — it's no longer "current"
+  if (idx > 1) {
+    const prev = strip.children[idx - 2];
+    if (prev && prev.dataset.state === 'got') {
+      prev.className = 'tl-cell got';
     }
-    const gotCount = Object.keys(scannedChunks).length;
-    setStatus(`✓ Got code ${idx}/${total}. ${gotCount < total ? 'Scan next…' : 'Complete!'}`);
-    if (gotCount === total) {
-      showToast(`All ${total} codes scanned ✓`, true);
-      setStatus('✓ All codes scanned — text complete!');
+  }
+  // Mark current
+  if (cell) cell.className = 'tl-cell got current';
+
+  // Update stats text
+  const got     = Object.keys(scannedChunks).length;
+  const missing = total - got;
+  document.getElementById('tlStats').textContent = `${got} / ${total}`;
+  const badge = document.getElementById('tlMissBadge');
+  badge.style.display = missing > 0 ? 'inline' : 'none';
+  if (missing > 0) badge.textContent = `${missing} missing`;
+
+  // Auto-scroll to current cell
+  const stripWrap = strip.parentElement;
+  if (stripWrap) stripWrap.scrollLeft = Math.max(0, (idx - 3) * 31);
+}
+
+// ── Throttled heavy update (text display + missing chips) ──
+let _heavyTimer = null;
+function _scheduleHeavyUpdate(total, gotCount) {
+  // Throttle to max 4 updates/sec — enough feedback, no jank
+  if (_heavyTimer) return;
+  _heavyTimer = setTimeout(async () => {
+    _heavyTimer = null;
+    await _runHeavyUpdate(total);
+  }, 250);
+}
+
+async function _runHeavyUpdate(total) {
+  // Text display
+  const box = document.getElementById('accumulatedText');
+  if (isCompressed) {
+    const got = Object.keys(scannedChunks).length;
+    if (total && got === total) {
+      const keys = Object.keys(scannedChunks).map(Number).sort((a,b)=>a-b);
+      const allPayload = keys.map(k => scannedChunks[k]).join('');
+      try { box.textContent = await decompressText(allPayload); }
+      catch(e) { box.textContent = allPayload; }
+    } else {
+      const got2 = Object.keys(scannedChunks).length;
+      box.textContent = `Scanning… ${got2}${total ? '/'+total : ''} chunks`;
     }
-  }, 0);
+  } else {
+    // Show contiguous prefix only
+    const keys = Object.keys(scannedChunks).map(Number).sort((a,b)=>a-b);
+    let end = 0;
+    for (const k of keys) { if (k === end + 1) end = k; else break; }
+    box.textContent = keys.filter(k=>k<=end).map(k=>scannedChunks[k]).join(' ')
+      || 'Scan QR codes in order — text will appear here…';
+  }
+
+  // Missing chips — only rebuild if frontier moved significantly
+  _rebuildMissingChips(total);
+}
+
+let _lastChipFrontier = 0;
+function _rebuildMissingChips(total) {
+  if (_frontier <= _lastChipFrontier && _frontier < total) return; // no new gaps
+  _lastChipFrontier = _frontier;
+
+  const summary = document.getElementById('tlMissingSummary');
+  const chipsEl = document.getElementById('tlMissingChips');
+  if (!summary || !chipsEl) return;
+
+  const missing = [];
+  for (let i = 1; i < _frontier; i++) {
+    if (!scannedChunks[i]) missing.push(i);
+  }
+
+  if (!missing.length) { summary.classList.remove('visible'); return; }
+  summary.classList.add('visible');
+  chipsEl.innerHTML = '';
+
+  // Collapse into ranges
+  const ranges = [];
+  let rs = missing[0], re = missing[0];
+  for (let i = 1; i <= missing.length; i++) {
+    if (i < missing.length && missing[i] === re + 1) { re = missing[i]; }
+    else { ranges.push([rs, re]); if (i < missing.length) { rs = missing[i]; re = missing[i]; } }
+  }
+  ranges.forEach(([s, e]) => {
+    const chip = document.createElement('div');
+    chip.className = 'tl-miss-chip' + (s !== e ? ' range' : '');
+    chip.textContent = s === e ? `${s}` : `${s}–${e}`;
+    chip.onclick = () => showMissingHint(s, total, _frontier);
+    chipsEl.appendChild(chip);
+  });
+}
+
+async function _onScanComplete(total) {
+  _statusEl().textContent = `✓ All ${total} scanned!`;
+  // Final heavy update to show full text
+  if (_heavyTimer) { clearTimeout(_heavyTimer); _heavyTimer = null; }
+  await _runHeavyUpdate(total);
+  // Mark all cells got (clear 'current' highlight)
+  const strip = document.getElementById('tlStrip');
+  for (let i = 0; i < strip.children.length; i++) {
+    const c = strip.children[i];
+    if (c.dataset.state === 'got') c.className = 'tl-cell got';
+  }
 }
 
 // ── NEW: SVG chain receiver ──
@@ -2012,8 +2165,8 @@ async function processSvgQR(data) {
   scannedChunks[idx] = true;
 
   const got = Object.keys(svgChunks).length;
-  showToast(`SVG chunk ${idx}/${total}`, true);
-  setStatus(got === total ? '✓ SVG complete!' : `SVG scan… ${got}/${total}`);
+  // No toast — just update status bar (no popup lag)
+  _statusEl().textContent = got === total ? '✓ SVG complete!' : `SVG ${got}/${total}`;
   updateTimeline(total, true);
 
   const pill = document.getElementById('progressPill');
@@ -2116,7 +2269,7 @@ async function updateTextDisplay() {
       } catch(e) {
         box.textContent = allPayload;
       }
-      box.classList.remove('flash-new'); void box.offsetWidth; box.classList.add('flash-new');
+      box.classList.remove('flash-new'); box.classList.add('flash-new');
     } else {
       box.textContent = `Scanning… ${scanned}${totalChunks ? '/'+totalChunks : ''} chunks received`;
     }
@@ -2131,7 +2284,6 @@ async function updateTextDisplay() {
   const displayKeys = keys.filter(k => k <= contiguousEnd);
   const text = displayKeys.map(k => scannedChunks[k]).join(' ');
   box.textContent = text || 'Scan QR codes in order — text will appear here…';
-  box.classList.remove('flash-new'); void box.offsetWidth; box.classList.add('flash-new');
 }
 
 // ── SCAN TIMELINE ──
@@ -2266,7 +2418,11 @@ function resetReader() {
   lastScanned   = null;
   isCompressed  = false;
   isSvgChain    = false;
+  _frontier     = 0;
+  _lastChipFrontier = 0;
+  if (_heavyTimer) { clearTimeout(_heavyTimer); _heavyTimer = null; }
   window._receivedSvgString = null;
+  qrfMeta = null;
 
   document.getElementById('fileDownloadBox').style.display = 'none';
   document.getElementById('fileDownloadBox').classList.remove('svg-box');
@@ -3032,9 +3188,22 @@ async function runSvgPreview() {
     const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
     const gzipped   = await gzipSvg(svgString);
     const codes     = Math.ceil(gzipped.length / chunkSize);
-    const jpegCodes = imgSendB64
-      ? Math.ceil((imgSendFile.name.length + 12 + imgSendB64.length) / chunkSize)
-      : '?';
+
+    // Compute JPEG QR codes the same way encodeImageChain does:
+    // gzip(jpegBytes) → Z85 → chunk. Use the already-rendered imgSendB64 as source.
+    let jpegCodes = null;
+    if (imgSendB64) {
+      try {
+        const pako2   = await ensurePako();
+        const binStr2 = atob(imgSendB64);
+        const jpegBytes2 = new Uint8Array(binStr2.length);
+        for (let i = 0; i < binStr2.length; i++) jpegBytes2[i] = binStr2.charCodeAt(i);
+        const gz2  = pako2.gzip(jpegBytes2, { level: 1 });
+        const z852 = z85Encode(gz2.length < jpegBytes2.length ? gz2 : jpegBytes2);
+        const hdrLen = (imgSendFile?.name?.length || 10) + 12;
+        jpegCodes = Math.ceil((z852.length + hdrLen) / chunkSize);
+      } catch(e) { jpegCodes = null; }
+    }
 
     const pathCount  = (svgString.match(/<path/g) || []).length +
                        (svgString.match(/<rect/g) || []).length;
@@ -3045,7 +3214,7 @@ async function runSvgPreview() {
     document.getElementById('svgStatPaths').textContent  = pathCount;
     document.getElementById('svgStatCodes').textContent  = codes;
     document.getElementById('svgStatVsJpeg').textContent =
-      typeof jpegCodes === 'number'
+      jpegCodes !== null
         ? (codes < jpegCodes ? `${jpegCodes - codes} fewer codes ✓` : `${codes - jpegCodes} more codes`)
         : '—';
 
@@ -3433,8 +3602,7 @@ function processFileQR(data) {
   scannedChunks[idx] = true;
 
   const got = Object.keys(fileChunks).length;
-  showToast(`Image chunk ${idx}/${total}`, true);
-  setStatus(got === total ? '✓ Image complete — saving!' : `Scanning image… ${got}/${total}`);
+  _statusEl().textContent = got === total ? '✓ Image complete!' : `Image ${got}/${total}`;
   updateTimeline(total, false);
   if (got === total) assembleFile(total);
 }
@@ -3600,9 +3768,20 @@ async function runPalPreview() {
     drawPaletteToCanvas(thumb, result.indexed, result.w, result.h, result.palette, 90, 90);
     const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
     const codes     = Math.ceil(result.payload.length / chunkSize);
-    const jpegCodes = imgSendB64 ? Math.ceil((imgSendFile.name.length + 12 + imgSendB64.length) / chunkSize) : null;
+    // Compute actual JPEG Z85 codes (same method as encodeImageChain)
+    let jpegCodes = null;
+    if (imgSendB64) {
+      try {
+        const _pako = await ensurePako();
+        const _bin = atob(imgSendB64); const _jb = new Uint8Array(_bin.length);
+        for (let _i = 0; _i < _bin.length; _i++) _jb[_i] = _bin.charCodeAt(_i);
+        const _gz = _pako.gzip(_jb, { level: 1 });
+        const _z  = z85Encode(_gz.length < _jb.length ? _gz : _jb);
+        jpegCodes = Math.ceil((_z.length + (imgSendFile?.name?.length || 10) + 12) / chunkSize);
+      } catch(_e) {}
+    }
     document.getElementById('palStatCodes').textContent = codes;
-    document.getElementById('palStatSize').textContent  = (totalPay / 1024).toFixed(1) + 'KB';
+    document.getElementById('palStatSize').textContent  = (result.payload.length / 1024).toFixed(1) + 'KB';
     document.getElementById('palStatCols').textContent  = result.palette.length;
     const compEl = document.getElementById('palStatComp');
     if (jpegCodes) {
@@ -4046,7 +4225,18 @@ async function runDctPreview() {
 
     const chunkSize = parseInt(document.getElementById('drwChunk').value) || 500;
     const codes = Math.ceil(result.encoded.length / chunkSize);
-    const jpegCodes = imgSendB64 ? Math.ceil((imgSendFile.name.length + 12 + imgSendB64.length) / chunkSize) : null;
+    // Compute actual JPEG Z85 codes (same method as encodeImageChain)
+    let jpegCodes = null;
+    if (imgSendB64) {
+      try {
+        const _pako = await ensurePako();
+        const _bin = atob(imgSendB64); const _jb = new Uint8Array(_bin.length);
+        for (let _i = 0; _i < _bin.length; _i++) _jb[_i] = _bin.charCodeAt(_i);
+        const _gz = _pako.gzip(_jb, { level: 1 });
+        const _z  = z85Encode(_gz.length < _jb.length ? _gz : _jb);
+        jpegCodes = Math.ceil((_z.length + (imgSendFile?.name?.length || 10) + 12) / chunkSize);
+      } catch(_e) {}
+    }
     document.getElementById('dctStatCodes').textContent = codes;
     document.getElementById('dctStatSize').textContent  = (result.encoded.length / 1024).toFixed(1) + 'KB';
     const compEl = document.getElementById('dctStatComp');
@@ -4268,8 +4458,8 @@ async function processProtocolChunk(type, data) {
   scannedChunks[idx] = true;
 
   const got = Object.keys(store).length;
-  showToast(`${type.toUpperCase()} chunk ${idx}/${total}`, true);
-  setStatus(got === total ? `✓ ${type.toUpperCase()} complete!` : `${type.toUpperCase()} scan… ${got}/${total}`);
+  // Status bar only — no popup per chunk
+  _statusEl().textContent = got === total ? `✓ ${type.toUpperCase()} complete!` : `${type.toUpperCase()} ${got}/${total}`;
   updateTimeline(total, false);
 
   const pill = document.getElementById('progressPill');
